@@ -999,13 +999,17 @@ smoke.
 
 ## 20. Open decisions
 
-These are in scope and not yet settled; they are tracked on the wayfinder map (issue #1)
-rather than decided here. The spec above is buildable without them, but not final.
+These are in scope and not yet settled; each is a ticket on the wayfinder map (issue #1)
+rather than a decision here. The spec above is buildable without them, but not final.
 
-- Write-tool safety: whether destructive tools need explicit confirmation or dry-run
-  affordances beyond the `destructiveHint` annotation.
-- `notes` embedded images and files: whether the gateway proxies Graph-authenticated
-  `/resources/{id}/$value` URLs so page media is viewable.
-- Rate limiting, quota handling, retry and backoff per Provider.
-- Observability: log shape, PII and token redaction rules.
-- Encryption key rotation for stored Credentials.
+- [#13](https://github.com/ToufiqSenpai/mcp-gateway/issues/13) — destructive tool
+  confirmation and dry-run affordances beyond the `destructiveHint` annotation.
+- [#14](https://github.com/ToufiqSenpai/mcp-gateway/issues/14) — whether the gateway
+  proxies Graph-authenticated `/resources/{id}/$value` URLs so `notes` page media is
+  viewable.
+- [#15](https://github.com/ToufiqSenpai/mcp-gateway/issues/15) — rate limits, quota
+  handling, retry and backoff per Provider.
+- [#16](https://github.com/ToufiqSenpai/mcp-gateway/issues/16) — observability: log shape
+  and token/PII redaction.
+- [#17](https://github.com/ToufiqSenpai/mcp-gateway/issues/17) — encryption key rotation
+  for stored Credentials.
