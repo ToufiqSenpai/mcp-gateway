@@ -1,0 +1,19 @@
+{
+  "name": "@mcp-gateway/notes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@microsoft/kiota-bundle": "1.0.0-preview.112",
+    "@microsoft/msgraph-sdk": "1.0.0-preview.92",
+    "@microsoft/msgraph-sdk-users": "1.0.0-preview.92",
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
+  }
+}

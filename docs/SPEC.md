@@ -4,9 +4,8 @@ A single-user gateway on Cloudflare Workers that hosts first-party MCP servers u
 `/mcps/*`, each against exactly one Provider, with several Accounts per MCP, an admin UI,
 and MCP resources and prompts.
 
-**Status:** design complete, nothing implemented. Vocabulary is defined in
-[`GLOSSARY.md`](./GLOSSARY.md); the decisions that are hard to reverse are recorded in
-[`docs/adr/`](./docs/adr/).
+**Status:** design complete, nothing implemented. The decisions that are hard to reverse are
+recorded in [`docs/adr/`](./docs/adr/).
 
 ---
 
@@ -99,22 +98,28 @@ MCP without a migration fails in CI rather than at runtime.
 | `@modelcontextprotocol/core` | 2.4.0 | transitive; schema types |
 | `zod` | 4.6 | tool input schemas, env validation |
 | `arctic` | 3.7 | OAuth authorize / exchange / refresh on Workers (ADR-0005) |
-| `@googleapis/calendar` | 20.1.0 | official Google Calendar client |
-| `gaxios` | 7.1.3 | HTTP layer the auth adapter delegates to |
-| `@microsoft/msgraph-sdk` | 1.0.0-preview.92 | Graph client shell |
+| `@googleapis/calendar` | 20.1.0 | type-only: request/response shapes |
+| `gaxios` | 7.3.1 | installed by the Google client, not used at runtime |
+| `@microsoft/msgraph-sdk` | 1.0.0-preview.92 | installed; Graph calls use plain `fetch` (see below) |
 | `@microsoft/msgraph-sdk-users` | 1.0.0-preview.92 | registers `me` / `users`, which is where OneNote lives |
 | `@microsoft/kiota-bundle` | 1.0.0-preview.112 | `DefaultRequestAdapter` with serializers registered |
 | `drizzle-orm` / `drizzle-kit` | 0.45 / 0.31 | D1 access and migration generation |
-| `vitest` | ^4.1 | `@cloudflare/vitest-pool-workers@0.23` peers on `^4.1.0`, so **not** vitest 5 |
-| `@cloudflare/vitest-pool-workers` | 0.23 | workerd test pool, `applyD1Migrations` |
+| `vitest` | ^4.1 | pinned to 4.x: the workerd pool peers on `^4.1.0`; move to 5 only when the pool declares `^5` (recheck at each pool release) |
+| `@cloudflare/vitest-pool-workers` | 0.23 | workerd test pool, `applyD1Migrations`; the package is now published as `@cloudflare/vitest-plugin`, and one `workerd` version is forced through `pnpm.overrides` so tests run on the deploy runtime |
 | `oxlint` / `oxfmt` | 1.91 / 0.76 | lint and format; no ESLint, no Prettier |
 
 Every `@microsoft/kiota-*` package must share one preview number; mixing them fails the
-build with `No matching export … registerDefaultDeserializer`. If the Graph preview chain
-breaks, Graph alone falls back to plain `fetch`; Google stays on its SDK.
+build with `No matching export … registerDefaultDeserializer`.
 
-Verified bundle sizes: Google Calendar 681 KiB / 133 KiB gzip; Graph 7.9 MiB / 770 KiB
-gzip. Both within the Workers limit.
+**Client implementation (drift recorded during build).** Both Provider clients are plain
+`fetch` behind a base-URL seam (`rootUrl` for Google, `baseUrl` for Graph). The vendor SDKs
+remain dependencies for their type shapes only. Reason: the Google SDK's `googleapis-common`
+CJS/ESM interop does not survive the workerd test runtime (`gaxios_1.Gaxios` undefined), and
+Graph's preview chain installs two kiota preview numbers in one resolution. Keeping the seam
+at the HTTP base URL is what the testing strategy already required; the typed request and
+response shapes are unchanged.
+
+Verified bundle size after the change: 1715 KiB / 317 KiB gzip for both MCPs together.
 
 **Why the v2 MCP SDK.** The official v1 line (`@modelcontextprotocol/sdk@1.32.2`) stops at
 protocol `2025-11-25`. `@modelcontextprotocol/server@2` implements `2026-07-28` with a
@@ -132,8 +137,10 @@ packages/
     package.json  tsconfig.json  vitest.config.ts  migrations/
     src/
       index.ts                 # Worker entry: Hono app
-      routes/{mcps,admin,oauth}.ts
+      routes/{mcps,oauth}.ts
+      routes/admin.tsx         # server-rendered routes need JSX
       mcps/registry.ts         # slug -> factory, the only MCP list
+      mcps/{context,pagination,cache,in-process}.ts
       db/{schema.ts,client.ts,queries.ts}
       auth/{access.ts,arctic.ts,crypto.ts}
       accounts/{lifecycle.ts,refresh.ts}
@@ -367,7 +374,9 @@ it. JSON-RPC errors stay reserved for protocol faults.
 
 `list_accounts` returns `{ accounts: [{ slug, isDefault }] }` for the MCP it is mounted on —
 nothing else: no state, no tokens, no `provider_subject`. An empty array when the MCP has no
-Accounts, never an error.
+Accounts, never an error. It lists **every** Account, including ones that are
+`needs_reauth` or `revoked`, so an unqualified call can name the broken Default Account
+instead of claiming there is no default (drift recorded during build).
 
 ---
 
@@ -507,6 +516,12 @@ createMcpHandler(factory, { legacy: 'reject', responseMode: 'json' })
 failures are `isError: true` results, never JSON-RPC errors. Unknown tool, prompt or
 resource is `-32602`; internal failures are `-32603`.
 
+**Argument validation detail (drift recorded during build).** The SDK's `tools/call` handler
+converts everything thrown inside a tool, including its own input-schema failures, into an
+`isError` result. `-32602` is therefore produced for unknown tools, malformed requests and
+prompt arguments, but a bad tool argument or cursor arrives as an `isError` result with a
+plain message. Resource reads keep `-32602` (unknown container, with `data.uri`).
+
 ### 11.1 Caching
 
 | Operation | `ttlMs` | `cacheScope` |
@@ -521,7 +536,9 @@ resource is `-32602`; internal failures are `-32603`.
 
 Anything derived from a Credential is `private`; `public` here would be a data-leak bug.
 All pages of one paginated list share the same `cacheScope`. `tools/call` results are not
-cacheable.
+cacheable. The SDK's own `resources/list` result drops per-call fields, so the gateway's
+MCP servers answer that method themselves in order to emit `ttlMs: 0` and the `_meta`
+skipped-Account warning for a partial listing.
 
 ### 11.2 Pagination
 
@@ -553,9 +570,10 @@ descriptions use snake_case.
 **Common rules**
 
 - Every tool takes an optional `account` slug in addition to the fields below.
-- Times are offset-less local wall-clock strings, with no UTC offset and no trailing `Z` —
-  the inverse of REST RFC3339. A named zone goes in `timeZone`, and only when the user
-  named one.
+- Times are ISO 8601 timestamps exactly as Google documents them: `dateTime` carries an
+  offset or trailing `Z` (for example `2019-11-20T08:19:06-07:00`), and `date` is a
+  midnight-UTC timestamp (for example `2019-11-20T00:00:00Z`), not a bare date. A named zone
+  goes in `timeZone`, and only when the user named one.
 - `notificationLevel` defaults to `ALL` on create, update, delete and respond, while REST
   defaults to none. This will email guests by default; it mirrors the reference surface and
   is called out in the runbook.
@@ -578,32 +596,34 @@ descriptions use snake_case.
 
 ```
 list_events(calendarId?, startTime?, endTime?, fullText?, eventType[]?,
-            eventTypeFilter[]?, orderBy?, pageSize? = 100, pageToken?, timeZone?)
+            eventTypeFilter[]?, orderBy?, pageSize? = 100 (max 250), pageToken?, timeZone?)
   -> { summary, description, updated, timeZone, accessRole,
        defaultReminders[], events: Event[], nextPageToken? }
 
 get_event(eventId, calendarId?) -> Event
 
-list_calendars(pageSize? = 100, pageToken?)
+list_calendars(pageSize? = 100 (max 250), pageToken?)
   -> { calendars: [{ id, summary, description, timeZone }], nextPageToken? }
 
 suggest_time(attendeeEmails[], startTime, endTime, durationMinutes? = 30,
              timeZone?, preferences?)
-  -> { timeSlots: [{ start, end, startTime?, endTime?, durationMinutes? }] }
-     preferences: { startHour?, endHour?, excludeWeekends?, pageSize? = 5 }
+  -> { timeSlots: [{ start, end, startTime? (deprecated), endTime? (deprecated),
+                     durationMinutes? (deprecated) }] }
+     start/end: DateOrDateTime; preferences: { startHour? "HH:mm", endHour? "HH:mm",
+     excludeWeekends?, pageSize? = 5 }
 
 create_event(summary, startTime, endTime, calendarId?, allDay?, addGoogleMeetUrl?,
-             googleMeetUrl?, attendees[]?, attendeeEmails[]?, attachments[]?,
+             googleMeetUrl?, attendees[]?, attendeeEmails[]? (deprecated), attachments[]?,
              availability?, colorId?, description?, eventType?, guestPermissions?,
              location?, notificationLevel?, overrideReminders[]?, recurrenceData[]?,
-             timeZone?, useDefaultReminders?, visibility?, workingLocationProperties?)
+             timeZone?, visibility?, workingLocationProperties?)
   -> Event
 
 update_event(eventId, calendarId?, summary?, description?, location?, startTime?,
-             endTime?, allDay?, timeZone?, addedAttendees[], addedAttendeeEmails[]?,
+             endTime?, allDay?, timeZone?, addedAttendees[]?, addedAttendeeEmails[]? (deprecated),
              removedAttendeeEmails[]?, addedAttachments[]?,
              removedAttachmentFileUrls[]?, availability?, colorId?, guestPermissions?,
-             notificationLevel?, overrideReminders[]?, useDefaultReminders?,
+             notificationLevel?, overrideReminders[]?,
              visibility?, addGoogleMeetUrl?, googleMeetUrl?)
   -> Event
 
@@ -626,11 +646,11 @@ search_events(query, pageSize?, pageToken?)
 
 **`Event`** carries `id`, `summary`, `description`, `location`, `start`, `end`,
 `originalStartTime`, `status`, `eventType`, `recurrence`, `recurringEventId`, `attendees`,
-`organizer`, `creator`, `attachments`, `conferenceData`, `conferenceUrl` (deprecated),
-`guestPermissions`, `overrideReminders`, `useDefaultReminders`, `availability`,
-`visibility`, `transparency` (deprecated), `colorId`, `label`,
+`organizer`, `creator`, `attachments`, `conferenceUrl`, `guestPermissions`,
+`overrideReminders`, `availability`, `visibility`, `transparency` (deprecated), `colorId`,
 `workingLocationProperties`, `htmlLink`, `created`, `updated`. `start`/`end` are
-`{ date, dateTime, timeZone }` with exactly one of `date` or `dateTime` set. REST fields
+`{ date, dateTime, timeZone }` with exactly one of `date` or `dateTime` set; `date` is a
+midnight-UTC timestamp and `dateTime` carries its offset. REST fields
 such as `kind`, `etag`, `iCalUID`, `sequence`, `hangoutLink` and `extendedProperties` are
 absent.
 
@@ -675,7 +695,7 @@ the Provider; reject a decoded `/`. No `primary` alias: always the concrete id
 
 Metadata from `calendarList.get`; events from `events.list` with `timeMin=now`,
 `timeMax=now+7d`, `singleEvents=true`, `orderBy=startTime`, `maxResults=50`. Event objects
-keep Google's shape (offset-less `dateTime`). The difference from `list_events`: a fixed
+keep Google's shape (ISO 8601 `dateTime` with offset). The difference from `list_events`: a fixed
 window and a metadata+events composite, where the tool is parameterized and returns one
 collection.
 
@@ -743,7 +763,10 @@ create_notebook({ account?, displayName })                  -> Notebook
 - `list_sections` and `create_section` require **exactly one** parent: `notebookId` or
   `sectionGroupId`. Neither or both → `-32602`.
 - `list_sections` with `notebookId` returns only sections directly in that notebook; with
-  neither parent it returns every section, nested ones included.
+  neither parent it returns every section, nested ones included. (Drift recorded during
+  build: for `list_sections` a zero-parent call is valid and means "all", as the endpoint
+  table and this bullet require; passing both parents is refused. `create_section` still
+  requires exactly one.)
 - `list_pages` with no `sectionId` returns pages across all notebooks.
 - `search_pages.query` is a non-empty string; matching is case-insensitive substring on the
   page **title only**. Graph has no `$search` and no content-search endpoint.

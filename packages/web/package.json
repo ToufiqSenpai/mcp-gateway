@@ -1,0 +1,25 @@
+{
+  "name": "@mcp-gateway/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "css:build": "tailwindcss -i src/admin/app.css -o src/admin/app.generated.css --minify",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@mcp-gateway/calendar": "workspace:*",
+    "@mcp-gateway/notes": "workspace:*",
+    "@modelcontextprotocol/server": "2.4.0",
+    "arctic": "3.7.0",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.16",
+    "jose": "6.2.15",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/workers-types": "5.20261104.1"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/calendar" },
+    { "path": "packages/notes" },
+    { "path": "packages/web" }
+  ]
+}

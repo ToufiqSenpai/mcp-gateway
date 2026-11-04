@@ -1,0 +1,313 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d8cfdad5-419c-4e1b-aa4a-dabcd8cd8807",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "accounts": {
+      "name": "accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mcp": {
+          "name": "mcp",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_subject": {
+          "name": "provider_subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "access_token_expires_at": {
+          "name": "access_token_expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "cache_epoch": {
+          "name": "cache_epoch",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "refresh_lock_until": {
+          "name": "refresh_lock_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refresh_lock_token": {
+          "name": "refresh_lock_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_refreshed_at": {
+          "name": "last_refreshed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "accounts_mcp_slug": {
+          "name": "accounts_mcp_slug",
+          "columns": [
+            "mcp",
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "accounts_identity": {
+          "name": "accounts_identity",
+          "columns": [
+            "mcp",
+            "provider",
+            "provider_subject"
+          ],
+          "isUnique": true
+        },
+        "accounts_default": {
+          "name": "accounts_default",
+          "columns": [
+            "mcp"
+          ],
+          "isUnique": true,
+          "where": "\"accounts\".\"is_default\" = 1"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "accounts_mcp_enum": {
+          "name": "accounts_mcp_enum",
+          "value": "\"accounts\".\"mcp\" IN ('calendar', 'notes')"
+        },
+        "accounts_provider_enum": {
+          "name": "accounts_provider_enum",
+          "value": "\"accounts\".\"provider\" IN ('google', 'microsoft')"
+        },
+        "accounts_state_enum": {
+          "name": "accounts_state_enum",
+          "value": "\"accounts\".\"state\" IN ('active', 'needs_reauth', 'revoked')"
+        },
+        "accounts_slug_format": {
+          "name": "accounts_slug_format",
+          "value": "\"accounts\".\"slug\" GLOB '[a-z0-9]*' AND \"accounts\".\"slug\" NOT GLOB '*[^a-z0-9-]*' AND length(\"accounts\".\"slug\") <= 32"
+        },
+        "accounts_provider_pairing": {
+          "name": "accounts_provider_pairing",
+          "value": "((\"accounts\".\"mcp\" = 'calendar' AND \"accounts\".\"provider\" = 'google') OR (\"accounts\".\"mcp\" = 'notes' AND \"accounts\".\"provider\" = 'microsoft'))"
+        }
+      }
+    },
+    "oauth_states": {
+      "name": "oauth_states",
+      "columns": {
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mcp": {
+          "name": "mcp",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_verifier": {
+          "name": "code_verifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_account_id": {
+          "name": "target_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "oauth_states_target_account_id_accounts_id_fk": {
+          "name": "oauth_states_target_account_id_accounts_id_fk",
+          "tableFrom": "oauth_states",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "target_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "oauth_states_mcp_enum": {
+          "name": "oauth_states_mcp_enum",
+          "value": "\"oauth_states\".\"mcp\" IN ('calendar', 'notes')"
+        },
+        "oauth_states_provider_enum": {
+          "name": "oauth_states_provider_enum",
+          "value": "\"oauth_states\".\"provider\" IN ('google', 'microsoft')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

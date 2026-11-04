@@ -1,0 +1,36 @@
+{
+  "name": "mcp-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "predev": "pnpm --filter @mcp-gateway/web css:build",
+    "dev": "wrangler dev --env-file .env",
+    "build": "pnpm --filter @mcp-gateway/web css:build",
+    "test": "pnpm -r test",
+    "pretest": "pnpm --filter @mcp-gateway/web css:build",
+    "typecheck": "tsc -b",
+    "lint": "oxlint packages",
+    "format": "oxfmt packages",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "predeploy": "pnpm --filter @mcp-gateway/web css:build",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.4",
+    "@types/node": "26.6.6",
+    "drizzle-kit": "0.31.11",
+    "oxfmt": "0.76.0",
+    "oxlint": "1.91.0",
+    "tailwindcss": "4.3.4",
+    "typescript": "7.0.2",
+    "vitest": "4.1.12",
+    "wrangler": "4.157.0"
+  }
+}

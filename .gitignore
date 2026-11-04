@@ -1,3 +1,25 @@
 .agents/
 .codebuddy/
+.specify/
+.opencode/
+
+# Credentials
 .dev.vars*
+.env*
+!.env.example
+
+# Build output
+node_modules/
+dist/
+coverage/
+.wrangler/
+*.tsbuildinfo
+
+# Generated stylesheet (built by the Tailwind CLI before dev and deploy)
+packages/web/src/admin/app.generated.css
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
