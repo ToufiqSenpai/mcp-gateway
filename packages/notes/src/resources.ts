@@ -1,153 +1,119 @@
+import { collectAcrossAccounts, type ResourceListing } from "@mcp-gateway/common"
 import {
   McpServer,
   ProtocolError,
   ProtocolErrorCode,
   ResourceNotFoundError,
-  ResourceTemplate,
-} from '@modelcontextprotocol/server';
-import { graphClient, GraphError } from './client';
-import type { McpContext } from './context';
-import {
-  NOTEBOOK_SELECT,
-  SECTION_SELECT,
-  toNotebook,
-  toSection,
-  type GraphNotebook,
-  type GraphSection,
-} from './map';
+  ResourceTemplate
+} from "@modelcontextprotocol/server"
 
-const URI_PATTERN = /^notes:\/\/([^/]+)\/notebooks\/(.+)$/;
+import { GraphError } from "./client"
+import { toNotebook, toSection } from "./map"
+import type { ToolContext } from "./tools/tool-context"
+
+const URI_PATTERN = /^notes:\/\/([^/]+)\/notebooks\/(.+)$/
+
+type ResourceItem = ResourceListing["resources"][number]
 
 export function notebookUri(account: string, id: string): string {
-  return `notes://${account}/notebooks/${encodeURIComponent(id)}`;
+  return `notes://${account}/notebooks/${encodeURIComponent(id)}`
 }
 
-function parseUri(uri: string): { account: string; notebookId: string } {
-  const match = URI_PATTERN.exec(uri);
+interface ParsedNotebookUri {
+  account: string
+  notebookId: string
+}
+
+function parseUri(uri: string): ParsedNotebookUri {
+  const match = URI_PATTERN.exec(uri)
   if (!match?.[1] || !match[2]) {
-    throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unrecognised notebook resource URI');
+    throw new ProtocolError(ProtocolErrorCode.InvalidParams, "Unrecognised notebook resource URI")
   }
-  return { account: match[1], notebookId: decodeURIComponent(match[2]) };
-}
-
-export interface ResourceListing {
-  resources: { uri: string; name: string; mimeType: string }[];
-  skipped: string[];
-  truncated: boolean;
+  return { account: match[1], notebookId: decodeURIComponent(match[2]) }
 }
 
 /** One resource per notebook per usable Account; a sick Account is skipped and named. */
-export async function listNotebookResources(ctx: McpContext): Promise<ResourceListing> {
-  const accounts = await ctx.listAccounts();
-  const resources: ResourceListing['resources'] = [];
-  const skipped: string[] = [];
-  let truncated = false;
+export class NotebookResourceRegistry {
+  public constructor(private readonly context: ToolContext) {}
 
-  for (const account of accounts) {
+  public async list(): Promise<ResourceListing> {
+    const accounts = await this.context.listAccounts()
+    const listing = await collectAcrossAccounts<ResourceItem>(accounts, async slug => {
+      const cached = await this.context.enumeration<ResourceItem>(slug, async () => {
+        const result = await this.context.graph(slug).notebooks()
+        return {
+          items: result.items.flatMap(notebook =>
+            notebook.id
+              ? [
+                  {
+                    uri: notebookUri(slug, notebook.id),
+                    name: notebook.displayName ?? notebook.id,
+                    mimeType: "application/json"
+                  }
+                ]
+              : []
+          ),
+          truncated: result.truncated
+        }
+      })
+      return { items: cached.items, truncated: cached.truncated }
+    })
+    return { resources: listing.items, skipped: listing.skipped, truncated: listing.truncated }
+  }
+
+  public async read(uri: string) {
+    const { account, notebookId } = parseUri(uri)
+    const client = this.context.graph(account)
+
     try {
-      const listing = await ctx.enumeration<ResourceListing['resources'][number]>(
-        account.slug,
-        async () => {
-          const result = await graphClient(ctx, account.slug).collect<GraphNotebook>(
-            `/me/onenote/notebooks?$select=${NOTEBOOK_SELECT}&$top=100`,
-          );
-          return {
-            items: result.items.flatMap((notebook) =>
-              notebook.id
-                ? [
-                    {
-                      uri: notebookUri(account.slug, notebook.id),
-                      name: notebook.displayName ?? notebook.id,
-                      mimeType: 'application/json',
-                    },
-                  ]
-                : [],
-            ),
-            truncated: result.truncated,
-          };
-        },
-      );
-      resources.push(...listing.items);
-      truncated ||= listing.truncated;
-    } catch {
-      skipped.push(account.slug);
+      const notebook = await client.notebook(notebookId)
+      if (!notebook) throw new ResourceNotFoundError(uri)
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              account,
+              notebook: toNotebook(notebook),
+              sections: (notebook.sections ?? []).map(toSection),
+              sectionGroups: (notebook.sectionGroups ?? []).flatMap(group =>
+                group.id ? [{ id: group.id, displayName: group.displayName }] : []
+              ),
+              truncated: false
+            })
+          }
+        ]
+      }
+    } catch (error) {
+      if (error instanceof GraphError && error.status === 404) {
+        throw new ResourceNotFoundError(uri)
+      }
+      if (error instanceof GraphError && (error.status === 401 || error.status === 403)) {
+        throw new ProtocolError(
+          ProtocolErrorCode.InternalError,
+          `Credentials for Account "${account}" were refused by the Provider.`
+        )
+      }
+      throw error
     }
   }
 
-  return { resources, skipped, truncated };
-}
-
-export function registerResources(server: McpServer, ctx: McpContext): void {
-  const template = new ResourceTemplate('notes://{account}/notebooks/{notebookId}', {
-    list: async () => {
-      const listing = await listNotebookResources(ctx);
-      return {
-        resources: listing.resources,
-        ...(listing.skipped.length > 0 ? { ttlMs: 0 } : {}),
-        ...(listing.skipped.length > 0
-          ? { _meta: { 'mcp-gateway/skippedAccounts': listing.skipped } }
-          : {}),
-      };
-    },
-  });
-
-  server.registerResource(
-    'notebook',
-    template,
-    { title: 'Notebook', mimeType: 'application/json' },
-    async (uri) => {
-      const { account, notebookId } = parseUri(uri.href);
-      let client;
-      try {
-        client = graphClient(ctx, account);
-      } catch {
-        throw new ProtocolError(
-          ProtocolErrorCode.InternalError,
-          `Credentials for Account "${account}" are unusable.`,
-        );
-      }
-
-      try {
-        const response = await client.request(
-          `/me/onenote/notebooks/${encodeURIComponent(notebookId)}?$select=${NOTEBOOK_SELECT}&$expand=sections,sectionGroups`,
-        );
-        const notebook = response.data as GraphNotebook & {
-          sections?: GraphSection[];
-          sectionGroups?: { id?: string; displayName?: string }[];
-        };
-
-        return {
-          contents: [
-            {
-              uri: uri.href,
-              mimeType: 'application/json',
-              text: JSON.stringify({
-                account,
-                notebook: toNotebook(notebook),
-                sections: (notebook.sections ?? []).map((section) => {
-                  void SECTION_SELECT;
-                  return toSection(section);
-                }),
-                sectionGroups: (notebook.sectionGroups ?? []).flatMap((group) =>
-                  group.id ? [{ id: group.id, ...(group.displayName ? { displayName: group.displayName } : {}) }] : [],
-                ),
-                truncated: false,
-              }),
-            },
-          ],
-        };
-      } catch (error) {
-        if (error instanceof GraphError && error.status === 404) {
-          throw new ResourceNotFoundError(uri.href);
+  public register(server: McpServer): void {
+    const template = new ResourceTemplate("notes://{account}/notebooks/{notebookId}", {
+      list: async () => {
+        const listing = await this.list()
+        const result = { resources: listing.resources }
+        if (listing.skipped.length > 0) {
+          Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })
         }
-        if (error instanceof GraphError && (error.status === 401 || error.status === 403)) {
-          throw new ProtocolError(
-            ProtocolErrorCode.InternalError,
-            `Credentials for Account "${account}" were refused by the Provider.`,
-          );
-        }
-        throw error;
+        return result
       }
-    },
-  );
+    })
+
+    server.registerResource("notebook", template, { title: "Notebook", mimeType: "application/json" }, async uri =>
+      this.read(uri.href)
+    )
+  }
 }

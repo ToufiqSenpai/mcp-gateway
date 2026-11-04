@@ -1,7 +1,23 @@
-import type { calendar_v3 } from '@googleapis/calendar';
-import type { McpContext } from './context';
+import type { calendar_v3 } from "@googleapis/calendar"
+import type { McpContext } from "@mcp-gateway/common"
 
-export const GOOGLE_ROOT_URL = 'https://www.googleapis.com/';
+export const GOOGLE_ROOT_URL = "https://www.googleapis.com/"
+
+/** Query values the Provider endpoints accept; objects never reach the URL builder. */
+export type QueryValue = string | number | boolean | string[] | undefined
+
+/** The subset of an error that carries a Provider status, without trusting its body. */
+export interface ProviderFailure {
+  readonly code?: string | number
+  readonly response?: { readonly status?: number }
+}
+
+interface RequestOptions {
+  method?: string
+  query?: Record<string, QueryValue>
+  body?: object
+  contentType?: string
+}
 
 /**
  * Google is called over plain `fetch` with the typed shapes from `@googleapis/calendar`
@@ -10,207 +26,192 @@ export const GOOGLE_ROOT_URL = 'https://www.googleapis.com/';
  * triggers exactly one forced refresh and one retry.
  */
 export class GoogleApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
+  public constructor(
+    public readonly status: number,
+    message: string
   ) {
-    super(message);
-    this.name = 'GoogleApiError';
+    super(message)
+    this.name = "GoogleApiError"
   }
 }
 
-export interface CalendarApi {
-  calendarList: {
-    list(params: calendar_v3.Params$Resource$Calendarlist$List): Promise<{
-      data: calendar_v3.Schema$CalendarList;
-    }>;
-    get(params: calendar_v3.Params$Resource$Calendarlist$Get): Promise<{
-      data: calendar_v3.Schema$CalendarListEntry;
-    }>;
-  };
-  events: {
-    list(params: calendar_v3.Params$Resource$Events$List): Promise<{
-      data: calendar_v3.Schema$Events;
-    }>;
-    get(params: calendar_v3.Params$Resource$Events$Get): Promise<{
-      data: calendar_v3.Schema$Event;
-    }>;
-    insert(params: calendar_v3.Params$Resource$Events$Insert): Promise<{
-      data: calendar_v3.Schema$Event;
-    }>;
-    patch(params: calendar_v3.Params$Resource$Events$Patch): Promise<{
-      data: calendar_v3.Schema$Event;
-    }>;
-    delete(params: calendar_v3.Params$Resource$Events$Delete): Promise<{ data: unknown }>;
-  };
-  freebusy: {
-    query(params: calendar_v3.Params$Resource$Freebusy$Query): Promise<{
-      data: calendar_v3.Schema$FreeBusyResponse;
-    }>;
-  };
-}
-
-class GoogleRequest {
-  constructor(
+/** One Account's authenticated transport: token at the edge, one refresh-and-retry on 401. */
+export class GoogleRequest {
+  public constructor(
     private readonly ctx: McpContext,
     private readonly slug: string,
-    private readonly rootUrl: string,
+    private readonly rootUrl: string
   ) {}
 
-  private async send(
-    token: string,
-    path: string,
-    options: {
-      method?: string;
-      query?: Record<string, unknown>;
-      body?: unknown;
-      contentType?: string;
-    },
-  ): Promise<Response> {
-    const url = new URL(path, this.rootUrl);
+  private async send(token: string, path: string, options: RequestOptions): Promise<Response> {
+    const url = new URL(path, this.rootUrl)
     for (const [key, value] of Object.entries(options.query ?? {})) {
-      if (value === undefined || value === null) continue;
+      if (value === undefined) continue
       if (Array.isArray(value)) {
-        for (const item of value) url.searchParams.append(key, String(item));
+        for (const item of value) url.searchParams.append(key, item)
       } else {
-        url.searchParams.set(key, String(value));
+        url.searchParams.set(key, String(value))
       }
     }
 
-    return fetch(url, {
-      method: options.method ?? 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        ...(options.body !== undefined
-          ? { 'Content-Type': options.contentType ?? 'application/json' }
-          : {}),
-      },
-      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-    });
-  }
-
-  async call<T>(
-    path: string,
-    options: {
-      method?: string;
-      query?: Record<string, unknown>;
-      body?: unknown;
-      contentType?: string;
-    } = {},
-  ): Promise<{ data: T }> {
-    let response = await this.send(await this.ctx.getAccessToken(this.slug), path, options);
-    if (response.status === 401) {
-      // Reactive refresh: one forced rotation and one retry.
-      response = await this.send(await this.ctx.refreshAccessToken(this.slug), path, options);
+    const headers = new Headers({
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json"
+    })
+    const init: RequestInit = { method: options.method ?? "GET", headers }
+    if (options.body !== undefined) {
+      headers.set("Content-Type", options.contentType ?? "application/json")
+      init.body = JSON.stringify(options.body)
     }
 
-    const text = await response.text();
+    return fetch(url, init)
+  }
+
+  public async call<T>(path: string, options: RequestOptions = {}): Promise<{ data: T }> {
+    let response = await this.send(await this.ctx.getAccessToken(this.slug), path, options)
+    if (response.status === 401) {
+      // Reactive refresh: one forced rotation and one retry.
+      response = await this.send(await this.ctx.refreshAccessToken(this.slug), path, options)
+    }
+
+    const text = await response.text()
     if (!response.ok) {
-      let message = `Google request failed (${response.status})`;
+      let message = `Google request failed (${response.status})`
       try {
-        const body = JSON.parse(text) as { error?: { message?: string } };
-        if (body.error?.message) message = body.error.message;
+        // SAFETY: a Provider error body is JSON with an optional error.message string.
+        const body = JSON.parse(text) as { error?: { message?: string } }
+        if (body.error?.message) message = body.error.message
       } catch {
         // Keep the generic message: a raw Provider body never surfaces.
       }
-      throw new GoogleApiError(response.status, message);
+      throw new GoogleApiError(response.status, message)
     }
 
-    return { data: (text ? JSON.parse(text) : {}) as T };
+    // SAFETY: the caller's T describes the documented Provider response for this path.
+    return { data: (text ? JSON.parse(text) : {}) as T }
   }
 }
 
 function pathSegment(value: string | undefined): string {
-  return encodeURIComponent(value ?? '');
+  return encodeURIComponent(value ?? "")
 }
 
-export function googleCalendar(
-  ctx: McpContext,
-  slug: string,
-  rootUrl: string = GOOGLE_ROOT_URL,
-): CalendarApi {
-  const request = new GoogleRequest(ctx, slug, rootUrl);
-  const base = 'calendar/v3';
+export class CalendarListResource {
+  public constructor(private readonly request: GoogleRequest) {}
 
-  return {
-    calendarList: {
-      list: (params) =>
-        request.call<calendar_v3.Schema$CalendarList>(`${base}/users/me/calendarList`, {
-          query: { maxResults: params.maxResults, pageToken: params.pageToken },
-        }),
-      get: (params) =>
-        request.call<calendar_v3.Schema$CalendarListEntry>(
-          `${base}/users/me/calendarList/${pathSegment(params.calendarId)}`,
-        ),
-    },
-    events: {
-      list: (params) =>
-        request.call<calendar_v3.Schema$Events>(
-          `${base}/calendars/${pathSegment(params.calendarId)}/events`,
-          {
-            query: {
-              timeMin: params.timeMin,
-              timeMax: params.timeMax,
-              singleEvents: params.singleEvents,
-              orderBy: params.orderBy,
-              maxResults: params.maxResults,
-              pageToken: params.pageToken,
-              eventTypes: params.eventTypes,
-              q: params.q,
-              timeZone: params.timeZone,
-            },
-          },
-        ),
-      get: (params) =>
-        request.call<calendar_v3.Schema$Event>(
-          `${base}/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`,
-        ),
-      insert: (params) =>
-        request.call<calendar_v3.Schema$Event>(
-          `${base}/calendars/${pathSegment(params.calendarId)}/events`,
-          {
-            method: 'POST',
-            body: params.requestBody,
-            query: {
-              sendUpdates: params.sendUpdates,
-              conferenceDataVersion: params.conferenceDataVersion,
-            },
-          },
-        ),
-      patch: (params) =>
-        request.call<calendar_v3.Schema$Event>(
-          `${base}/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`,
-          {
-            method: 'PATCH',
-            body: params.requestBody,
-            query: {
-              sendUpdates: params.sendUpdates,
-              conferenceDataVersion: params.conferenceDataVersion,
-            },
-          },
-        ),
-      delete: (params) =>
-        request.call<unknown>(
-          `${base}/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`,
-          { method: 'DELETE', query: { sendUpdates: params.sendUpdates } },
-        ),
-    },
-    freebusy: {
-      query: (params) =>
-        request.call<calendar_v3.Schema$FreeBusyResponse>(`${base}/freeBusy`, {
-          method: 'POST',
-          body: params.requestBody,
-        }),
-    },
-  };
+  public list(params: calendar_v3.Params$Resource$Calendarlist$List) {
+    return this.request.call<calendar_v3.Schema$CalendarList>("calendar/v3/users/me/calendarList", {
+      query: { maxResults: params.maxResults, pageToken: params.pageToken }
+    })
+  }
+
+  public get(params: calendar_v3.Params$Resource$Calendarlist$Get) {
+    return this.request.call<calendar_v3.Schema$CalendarListEntry>(
+      `calendar/v3/users/me/calendarList/${pathSegment(params.calendarId)}`
+    )
+  }
+}
+
+export class EventsResource {
+  public constructor(private readonly request: GoogleRequest) {}
+
+  public list(params: calendar_v3.Params$Resource$Events$List) {
+    return this.request.call<calendar_v3.Schema$Events>(
+      `calendar/v3/calendars/${pathSegment(params.calendarId)}/events`,
+      {
+        query: {
+          timeMin: params.timeMin,
+          timeMax: params.timeMax,
+          singleEvents: params.singleEvents,
+          orderBy: params.orderBy,
+          maxResults: params.maxResults,
+          pageToken: params.pageToken,
+          eventTypes: params.eventTypes,
+          q: params.q,
+          timeZone: params.timeZone
+        }
+      }
+    )
+  }
+
+  public get(params: calendar_v3.Params$Resource$Events$Get) {
+    return this.request.call<calendar_v3.Schema$Event>(
+      `calendar/v3/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`
+    )
+  }
+
+  public insert(params: calendar_v3.Params$Resource$Events$Insert) {
+    return this.request.call<calendar_v3.Schema$Event>(
+      `calendar/v3/calendars/${pathSegment(params.calendarId)}/events`,
+      {
+        method: "POST",
+        body: params.requestBody,
+        query: {
+          sendUpdates: params.sendUpdates,
+          conferenceDataVersion: params.conferenceDataVersion
+        }
+      }
+    )
+  }
+
+  public patch(params: calendar_v3.Params$Resource$Events$Patch) {
+    return this.request.call<calendar_v3.Schema$Event>(
+      `calendar/v3/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`,
+      {
+        method: "PATCH",
+        body: params.requestBody,
+        query: {
+          sendUpdates: params.sendUpdates,
+          conferenceDataVersion: params.conferenceDataVersion
+        }
+      }
+    )
+  }
+
+  public delete(params: calendar_v3.Params$Resource$Events$Delete) {
+    return this.request.call<object>(
+      `calendar/v3/calendars/${pathSegment(params.calendarId)}/events/${pathSegment(params.eventId)}`,
+      { method: "DELETE", query: { sendUpdates: params.sendUpdates } }
+    )
+  }
+}
+
+export class FreeBusyResource {
+  public constructor(private readonly request: GoogleRequest) {}
+
+  public query(params: calendar_v3.Params$Resource$Freebusy$Query) {
+    return this.request.call<calendar_v3.Schema$FreeBusyResponse>("calendar/v3/freeBusy", {
+      method: "POST",
+      body: params.requestBody
+    })
+  }
+}
+
+/** The typed Google surface for one Account; one instance per tool call, never shared. */
+export class GoogleCalendarClient {
+  public readonly calendarList: CalendarListResource
+  public readonly events: EventsResource
+  public readonly freebusy: FreeBusyResource
+
+  public constructor(ctx: McpContext, slug: string, rootUrl: string = GOOGLE_ROOT_URL) {
+    const request = new GoogleRequest(ctx, slug, rootUrl)
+    this.calendarList = new CalendarListResource(request)
+    this.events = new EventsResource(request)
+    this.freebusy = new FreeBusyResource(request)
+  }
+}
+
+export function googleCalendar(ctx: McpContext, slug: string, rootUrl: string = GOOGLE_ROOT_URL): GoogleCalendarClient {
+  return new GoogleCalendarClient(ctx, slug, rootUrl)
 }
 
 /** Reads the Provider error status without ever returning a raw body. */
-export function providerErrorCode(error: unknown): string | undefined {
-  if (error instanceof GoogleApiError) return String(error.status);
-  const maybe = error as { code?: unknown; response?: { status?: unknown } };
-  if (typeof maybe.code === 'string' || typeof maybe.code === 'number') return String(maybe.code);
-  if (typeof maybe.response?.status === 'number') return String(maybe.response.status);
-  return undefined;
+export function providerErrorCode(error: Error): string | undefined {
+  if (error instanceof GoogleApiError) return String(error.status)
+  // SAFETY: Provider SDK errors carry code/response.status; absent members read as undefined.
+  const failure = error as ProviderFailure
+  if (failure.code !== undefined) return String(failure.code)
+  const status = failure.response?.status
+  if (status !== undefined) return String(status)
+  return undefined
 }

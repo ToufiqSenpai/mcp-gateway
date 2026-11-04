@@ -1,58 +1,61 @@
-import { z } from 'zod';
-import { googleCalendar } from '../client';
-import { accountSlug } from '../context';
-import { toEvent, type CalendarEvent } from '../map';
-import { accountSchema, pageSizeSchema, pageTokenSchema } from '../schemas';
-import { ToolResult, clampPageSize, collectPages, defineTool, paginate } from './helpers';
+import type { calendar_v3 } from "@googleapis/calendar"
+import { ToolResult } from "@mcp-gateway/common"
+import { z } from "zod"
+
+import { toEvent, type CalendarEvent } from "../map"
+import { accountSchema, pageSizeSchema, pageTokenSchema } from "../schemas"
+import { collectPages, defineTool } from "./helpers"
+
+const inputSchema = z.object({
+  account: accountSchema,
+  query: z.string().min(1),
+  pageSize: pageSizeSchema,
+  pageToken: pageTokenSchema
+})
+
+interface EventSearchData {
+  events: CalendarEvent[]
+  nextPageToken?: string
+}
 
 export const searchEventsTool = defineTool(
-  'search_events',
+  "search_events",
   {
-    title: 'Search events',
+    title: "Search events",
     description:
-      'Literal text search over the primary calendar, matching text rather than meaning. Takes no calendarId and no time bounds.',
-    inputSchema: z.object({
-      account: accountSchema,
-      query: z.string().min(1),
-      pageSize: pageSizeSchema,
-      pageToken: pageTokenSchema,
-    }),
-    annotations: { readOnlyHint: true, idempotentHint: true },
+      "Literal text search over the primary calendar, matching text rather than meaning. Takes no calendarId and no time bounds.",
+    inputSchema,
+    annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, ctx) => {
-    const slug = await accountSlug(ctx, args.account);
-    const client = googleCalendar(ctx, slug);
-    const accounts = await ctx.listAccounts();
+  async (args, context) => {
+    const slug = await context.resolve(args.account)
+    const client = context.calendar(slug)
+    const accounts = await context.listAccounts()
 
-    const collected = await collectPages<CalendarEvent>(async (pageToken) => {
-      const response = await client.events.list({
-        calendarId: 'primary',
+    const collected = await collectPages<CalendarEvent>(async pageToken => {
+      const params: calendar_v3.Params$Resource$Events$List = {
+        calendarId: "primary",
         q: args.query,
         singleEvents: true,
-        maxResults: 250,
-        ...(pageToken ? { pageToken } : {}),
-      });
+        maxResults: 250
+      }
+      if (pageToken) params.pageToken = pageToken
+      const response = await client.events.list(params)
       return {
         items: (response.data.items ?? []).map(toEvent),
-        nextPageToken: response.data.nextPageToken,
-      };
-    });
+        nextPageToken: response.data.nextPageToken
+      }
+    })
 
-    const page = await paginate<CalendarEvent>({
-      ctx,
+    const page = await context.paginate<CalendarEvent>({
       accounts,
       pageToken: args.pageToken,
-      pageSize: clampPageSize(args.pageSize),
-      fetchAll: async () => ({ items: collected.items, truncated: collected.truncated }),
-    });
+      pageSize: args.pageSize,
+      fetchAll: async () => ({ items: collected.items, truncated: collected.truncated })
+    })
 
-    return new ToolResult(
-      {
-        events: page.items,
-        ...(page.nextPageToken ? { nextPageToken: page.nextPageToken } : {}),
-      },
-      { truncated: page.truncated },
-    );
-  },
-);
-
+    const data: EventSearchData = { events: page.items }
+    if (page.nextPageToken) data.nextPageToken = page.nextPageToken
+    return new ToolResult(data, { truncated: page.truncated, skipped: page.skipped })
+  }
+)

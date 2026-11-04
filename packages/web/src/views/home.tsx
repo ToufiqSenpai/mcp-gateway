@@ -1,32 +1,29 @@
-import type { Env } from '../env';
-import { countAccountsByState, findDefaultAccount } from '../db/queries';
-import { createDb } from '../db/client';
-import { MCP_REGISTRY, MCP_SLUGS } from '../mcps/registry';
-import { Layout } from '../views/layout';
+import { AccountRepository } from "../db/account-repository"
+import { createDb } from "../db/client"
+import type { Env } from "../env"
+import { MCP_REGISTRY, MCP_SLUGS } from "../mcps/registry"
+import { Layout } from "../views/layout"
 
 export interface McpRow {
-  slug: string;
-  provider: string;
-  counts: Record<string, number>;
-  defaultSlug?: string;
+  slug: string
+  provider: string
+  counts: Record<string, number>
+  defaultSlug?: string
 }
 
 export async function loadMcpRows(env: Env): Promise<McpRow[]> {
-  const db = createDb(env);
+  const repository = new AccountRepository(createDb(env))
   return Promise.all(
-    MCP_SLUGS.map(async (slug) => {
-      const [counts, defaultAccount] = await Promise.all([
-        countAccountsByState(db, slug),
-        findDefaultAccount(db, slug),
-      ]);
+    MCP_SLUGS.map(async slug => {
+      const [counts, defaultAccount] = await Promise.all([repository.countByState(slug), repository.findDefault(slug)])
       return {
         slug,
         provider: MCP_REGISTRY[slug].provider,
         counts,
-        defaultSlug: defaultAccount?.slug,
-      };
-    }),
-  );
+        defaultSlug: defaultAccount?.slug
+      }
+    })
+  )
 }
 
 export function HomePage({ rows, devBypass }: { rows: McpRow[]; devBypass: boolean }) {
@@ -44,7 +41,7 @@ export function HomePage({ rows, devBypass }: { rows: McpRow[]; devBypass: boole
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map(row => (
             <tr class="border-b border-slate-200">
               <td class="py-2 font-medium">
                 <a class="text-blue-700 underline" href={`/admin/mcps/${row.slug}`}>
@@ -54,14 +51,14 @@ export function HomePage({ rows, devBypass }: { rows: McpRow[]; devBypass: boole
               <td class="py-2 font-mono text-xs">/mcps/{row.slug}</td>
               <td class="py-2">{row.provider}</td>
               <td class="py-2">
-                {row.counts.active ?? 0} active, {row.counts.needs_reauth ?? 0} reauth,{' '}
-                {row.counts.revoked ?? 0} revoked
+                {row.counts.active ?? 0} active, {row.counts.needs_reauth ?? 0} reauth, {row.counts.revoked ?? 0}{" "}
+                revoked
               </td>
-              <td class="py-2">{row.defaultSlug ?? '—'}</td>
+              <td class="py-2">{row.defaultSlug ?? "—"}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </Layout>
-  );
+  )
 }

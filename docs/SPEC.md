@@ -59,16 +59,27 @@ module. It receives:
 ```ts
 interface McpContext {
   listAccounts(): Promise<{ slug: string; isDefault: boolean }[]>;
-  getAccessToken(slug: string): Promise<string>; // refreshes if needed, throws on unusable Account
+  getAccessToken(slug: string): Promise<string>;
+  refreshAccessToken(slug: string): Promise<string>;
+  cursors: CursorCodec;
+  invalidateEnumeration(): Promise<void>;
+  enumeration<T>(
+    account: string,
+    load: () => Promise<{ items: T[]; truncated: boolean }>,
+  ): Promise<{ items: T[]; truncated: boolean; cached: boolean }>;
 }
 ```
 
 Accounts, Credentials, refresh and the registry stay in `packages/web`. This is what makes
-an MCP package testable without a database (ADR-0006).
+an MCP package testable without a database (ADR-0006). The interface is the contract: the
+Worker's `GatewayMcpContext` implements it without adding members, and each package mirrors
+it exactly (asserted at compile time). `createServer(ctx)` is a thin adapter over
+`CalendarServer` / `NotesServer`; internal collaborators are classes (ADR-0007).
 
-**Registry.** `packages/web/src/mcps/registry.ts` is the only map from slug to factory.
-A test asserts its keys equal the `mcp` CHECK enum in the Drizzle schema, so adding an
-MCP without a migration fails in CI rather than at runtime.
+**Registry.** `packages/web/src/mcps/registry.ts` is the only map from slug to factory;
+`McpRegistry` is a lookup facade over that const, not a second map. A test asserts its keys
+equal the `mcp` CHECK enum in the Drizzle schema, so adding an MCP without a migration fails
+in CI rather than at runtime.
 
 **Request flow for `/mcps/:slug`.**
 
@@ -95,31 +106,44 @@ MCP without a migration fails in CI rather than at runtime.
 | `hono` | 4.13 | routing for `/mcps/*`, `/admin`, `/oauth/*`; JSX for admin |
 | `jose` | resolved at install | RS256 verification of `Cf-Access-Jwt-Assertion` against the team JWKS |
 | `@modelcontextprotocol/server` | 2.4.0 | MCP `2026-07-28` server; `createMcpHandler` |
+| `@modelcontextprotocol/hono` | 2.0.2 | Hono app for `/mcps/*`; Host/Origin validation and JSON body parsing |
+| `@modelcontextprotocol/client` | 2.4.0 | in-process MCP client for the admin test panel |
 | `@modelcontextprotocol/core` | 2.4.0 | transitive; schema types |
 | `zod` | 4.6 | tool input schemas, env validation |
 | `arctic` | 3.7 | OAuth authorize / exchange / refresh on Workers (ADR-0005) |
 | `@googleapis/calendar` | 20.1.0 | type-only: request/response shapes |
 | `gaxios` | 7.3.1 | installed by the Google client, not used at runtime |
-| `@microsoft/msgraph-sdk` | 1.0.0-preview.92 | installed; Graph calls use plain `fetch` (see below) |
+| `@microsoft/msgraph-sdk` | 1.0.0-preview.92 | `GraphRequestAdapter` + `createGraphServiceClient`; all OneNote calls and paging |
 | `@microsoft/msgraph-sdk-users` | 1.0.0-preview.92 | registers `me` / `users`, which is where OneNote lives |
-| `@microsoft/kiota-bundle` | 1.0.0-preview.112 | `DefaultRequestAdapter` with serializers registered |
+| `@microsoft/kiota-abstractions` | 1.0.0-preview.112 | `AuthenticationProvider` and `RequestInformation` for the two raw calls the fluent API cannot type |
 | `drizzle-orm` / `drizzle-kit` | 0.45 / 0.31 | D1 access and migration generation |
 | `vitest` | ^4.1 | pinned to 4.x: the workerd pool peers on `^4.1.0`; move to 5 only when the pool declares `^5` (recheck at each pool release) |
 | `@cloudflare/vitest-pool-workers` | 0.23 | workerd test pool, `applyD1Migrations`; the package is now published as `@cloudflare/vitest-plugin`, and one `workerd` version is forced through `pnpm.overrides` so tests run on the deploy runtime |
 | `oxlint` / `oxfmt` | 1.91 / 0.76 | lint and format; no ESLint, no Prettier |
 
-Every `@microsoft/kiota-*` package must share one preview number; mixing them fails the
-build with `No matching export … registerDefaultDeserializer`.
+Every `@microsoft/kiota-*` package must resolve to one preview number; mixing two copies fails
+the bundle with `No matching export … registerDefaultDeserializer`. `pnpm-workspace.yaml`
+pins `@microsoft/kiota-abstractions` and `@microsoft/kiota-authentication-azure` to
+`1.0.0-preview.112` because `@microsoft/msgraph-sdk-core` still asks for `^preview.82`.
 
-**Client implementation (drift recorded during build).** Both Provider clients are plain
-`fetch` behind a base-URL seam (`rootUrl` for Google, `baseUrl` for Graph). The vendor SDKs
-remain dependencies for their type shapes only. Reason: the Google SDK's `googleapis-common`
-CJS/ESM interop does not survive the workerd test runtime (`gaxios_1.Gaxios` undefined), and
-Graph's preview chain installs two kiota preview numbers in one resolution. Keeping the seam
-at the HTTP base URL is what the testing strategy already required; the typed request and
-response shapes are unchanged.
+**Client implementation.** `packages/notes/src/client.ts` builds the SDK client the way the
+package README does: implement `AuthenticationProvider` against `McpContext`
+(`headers.add("Authorization", …)` — `Headers` is `Map<string, Set<string>>`, so `set` would
+spread the token into characters), then `new GraphRequestAdapter(auth)`,
+`adapter.baseUrl = …`, `createGraphServiceClient(adapter)`, and
+`import "@microsoft/msgraph-sdk-users"` for `me`. Tools call typed builders
+(`client.me.onenote.notebooks.get({ queryParameters: … })`), paging follows
+`odataNextLink`, and `GraphError` is translated from the SDK's `ODataError` at that seam.
+`kiota-bundle` is transitive through `msgraph-sdk-core`; it is not a direct dependency.
 
-Verified bundle size after the change: 1715 KiB / 317 KiB gzip for both MCPs together.
+Two calls stay on `RequestInformation` because the generated v1 metadata does not match the
+documented endpoints: creating a page needs a `text/html` body (the builder types JSON) and
+`update_page` needs `PATCH …/pages/{id}/content` (the builder only exposes the
+`onenotePatchContent` action). Both still go through the SDK adapter, so auth, retries and
+error mapping are unchanged.
+
+Verified bundle size after the change: 10 167 KiB / 1 176 KiB gzip for the Worker (was
+1 715 KiB / 317 KiB gzip with plain `fetch` for both Providers).
 
 **Why the v2 MCP SDK.** The official v1 line (`@modelcontextprotocol/sdk@1.32.2`) stops at
 protocol `2025-11-25`. `@modelcontextprotocol/server@2` implements `2026-07-28` with a
@@ -139,19 +163,28 @@ packages/
       index.ts                 # Worker entry: Hono app
       routes/{mcps,oauth}.ts
       routes/admin.tsx         # server-rendered routes need JSX
-      mcps/registry.ts         # slug -> factory, the only MCP list
+      mcps/registry.ts         # slug -> factory, the only MCP list + McpRegistry facade
       mcps/{context,pagination,cache,in-process}.ts
-      db/{schema.ts,client.ts,queries.ts}
-      auth/{access.ts,arctic.ts,crypto.ts}
-      accounts/{lifecycle.ts,refresh.ts}
+                               # interface + HmacCursorCodec, EnumerationCache, InProcessRunner
+      db/{schema.ts,client.ts,queries.ts,account-repository.ts}
+      auth/{access.ts,arctic.ts,crypto.ts,scopes.ts}
+                               # AccessVerifier, TokenCipher, Required scope sets + coverage
+      lib/base64url.ts         # shared base64url codec: envelope, cursor, CSRF token
+      accounts/{lifecycle.ts,refresh.ts,lifecycle-oauth.ts,errors.ts,gateway-context.ts}
+                               # AccountService, RefreshService, OAuthFlowService
       admin/{app.css, app.generated.css}   # generated file is gitignored
       views/                   # server-rendered JSX
   calendar/
     package.json  tsconfig.json  vitest.config.ts
     src/{index.ts,server.ts,client.ts,tools/,resources.ts,prompts.ts}
+      server.ts                # CalendarServer + createServer adapter
+      client.ts                # GoogleCalendarClient + resource classes
+      tools/{index,helpers,tool-context,registry}.ts
   notes/
     package.json  tsconfig.json  vitest.config.ts
     src/{index.ts,server.ts,client.ts,tools/,resources.ts}
+      server.ts                # NotesServer + createServer adapter
+      tools/{index,helpers,tool-context,registry}.ts
 ```
 
 No Workers Static Assets. Tailwind is compiled to `packages/web/src/admin/app.generated.css`
@@ -210,7 +243,7 @@ CREATE TABLE accounts (
   provider_subject       TEXT NOT NULL,
   email                  TEXT NOT NULL,
   display_name           TEXT,
-  access_token           TEXT,                        -- v1.<iv>.<ct>, NULL when revoked
+  access_token           TEXT,                        -- v2.<iv>.<ct||tag>, NULL when revoked
   refresh_token          TEXT,
   access_token_expires_at INTEGER NOT NULL,           -- unix seconds
   scopes                 TEXT NOT NULL,               -- space-delimited, as returned by the Provider
@@ -388,8 +421,9 @@ instead of claiming there is no default (drift recorded during build).
   per isolate; absent or wrong length makes every Account operation fail closed with a
   generic `500` (detail only in logs). Never a plaintext fallback, never a runtime-generated
   key.
-- AES-GCM, 12-byte random IV per encryption, envelope `v1.<iv>.<ciphertext>` with base64url
-  segments.
+- AES-256-GCM via `node:crypto`, 12-byte random IV per encryption, envelope
+  `v2.<iv>.<ciphertext||tag>` with base64url segments. A `v1` envelope written by the
+  earlier Web Crypto implementation stays readable until a refresh rewrites the row.
 - AAD = `"<account_id>:<field>"`, `field` ∈ `access_token` | `refresh_token`, so a
   ciphertext cannot be replayed into another row or column.
 - Encrypted: `access_token`, `refresh_token`. Plaintext: expiry, scopes, email, state and
@@ -494,6 +528,9 @@ There is no gateway-wide discovery document.
 ```ts
 createMcpHandler(factory, { legacy: 'reject', responseMode: 'json' })
 ```
+
+Each handler is mounted on `createMcpHonoApp({ host, allowedHosts, allowedOrigins })`, so
+`Host` and `Origin` are validated against `PUBLIC_HOSTNAME` before dispatch.
 
 - One server instance per HTTP request; no session, no Durable Object.
 - `legacy: 'reject'` refuses 2025-era traffic rather than silently serving it.
@@ -914,9 +951,10 @@ page; no `confirm()`.
 
 **Test-a-tool panel.** A tool picker from the in-code registry, an `account` selector
 defaulting to the Default Account, a JSON args textarea, and a `POST` that runs the tool
-**in-process** through the same handler `/mcps/*` uses — no self-`fetch`, so no service
-token is stored in the Worker. It renders the JSON-RPC result including `isError`, plus
-duration. No history, no persistence. Write tools are callable and labelled as writes.
+**in-process** through an in-memory MCP client session against the same server factory — no
+self-`fetch`, so no service token is stored in the Worker. It renders the result including
+`isError`, plus duration. No history, no persistence. Write tools are callable and labelled as
+writes.
 
 **Redaction.** Shown: email, display name, slug, state, default flag, scopes, expiry and
 refresh timestamps, `last_error` as a code. Never rendered: access or refresh token
@@ -944,8 +982,12 @@ from the build hash. No Static Assets, no PostCSS, no Vite.
 | `packages/notes` | plain Node | tool handlers, response mapping, schema shapes |
 
 Providers are faked **below** the SDK, at the HTTP base URL — Google via
-`calendar({ rootUrl })`, Graph via `adapter.baseUrl` — not by stubbing SDK methods. Live
-smoke tests run only when `LIVE=1`, never in CI.
+`GoogleCalendarClient`'s `rootUrl`, Graph via `GraphClient`'s `baseUrl` — not by stubbing
+SDK methods. Live smoke tests run only when `LIVE=1`, never in CI.
+
+Contract tests also pin the package boundary: each package's `McpContext` must be
+structurally identical to the Worker's, and `tools/list` order must match the top-level
+declaration order in `tools/index.ts`.
 
 The MCP layer is tested against the conformance probes: `server/discover` shape,
 `_meta` and header validation, `405` on `GET`/`DELETE`, `-32602` for unknown
@@ -1005,7 +1047,7 @@ tools, resources, prompts, cursor pagination, enumeration cache.
 *Exit:* the MCP conformance probes pass on `/mcps/calendar`, and each tool is exercised
 against a faked `rootUrl`.
 
-**M3 — `notes`.** Graph client seam (`msgraph-sdk-users`, kiota bundle), ten tools,
+**M3 — `notes`.** Graph client (`GraphRequestAdapter` + `msgraph-sdk-users`), ten tools,
 resources, cursor pagination including `search_pages`' extra cursor state.
 *Exit:* conformance probes pass on `/mcps/notes`, and every tool is exercised against a
 faked `adapter.baseUrl`.

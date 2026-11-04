@@ -9,5 +9,5 @@
     "outDir": "dist/types"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "test/**/*.ts"],
-  "references": [{ "path": "../calendar" }, { "path": "../notes" }]
+  "references": [{ "path": "../common" }, { "path": "../calendar" }, { "path": "../notes" }]
 }

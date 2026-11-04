@@ -1,18 +1,17 @@
-import type { ToolDefinition } from './helpers';
-import { createPageTool } from './create-page';
-import { getPageTool } from './get-page';
-import {
-  listAccountsTool,
-  listNotebooksTool,
-  listPagesTool,
-  listSectionsTool,
-} from './lists';
-import { searchPagesTool } from './search-pages';
-import { updatePageTool } from './update-page';
-import { createNotebookTool, createSectionTool, deletePageTool } from './writes';
+import type { ToolDefinition } from "@mcp-gateway/common"
+
+import { createPageTool } from "./create-page"
+import { getPageTool } from "./get-page"
+import { listAccountsTool, listNotebooksTool, listPagesTool, listSectionsTool } from "./lists"
+import { searchPagesTool } from "./search-pages"
+import type { ToolContext } from "./tool-context"
+import { updatePageTool } from "./update-page"
+import { createNotebookTool, createSectionTool, deletePageTool } from "./writes"
+
+export type NotesTool = ToolDefinition<ToolContext>
 
 /** Registration order is the `tools/list` order, which is deterministic run to run. */
-export const notesTools: ToolDefinition[] = [
+export const notesTools: readonly NotesTool[] = [
   listNotebooksTool,
   listSectionsTool,
   listPagesTool,
@@ -23,5 +22,5 @@ export const notesTools: ToolDefinition[] = [
   deletePageTool,
   createSectionTool,
   createNotebookTool,
-  listAccountsTool,
-];
+  listAccountsTool
+]

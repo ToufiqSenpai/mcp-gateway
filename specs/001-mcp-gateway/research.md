@@ -28,9 +28,9 @@ All technical unknowns were resolved before this plan by `docs/SPEC.md` and ADR-
 
 ## R5 — Provider SDKs and their seams
 
-- **Decision**: `@googleapis/calendar` with a `rootUrl` seam; Microsoft Graph through `@microsoft/msgraph-sdk` + `-users` + `kiota-bundle`, with `adapter.baseUrl` as the seam.
-- **Rationale**: typed request building and Provider pagination come for free; the seams let tests fake HTTP below the SDK instead of stubbing SDK methods. Graph requires importing `@microsoft/msgraph-sdk-users` to register `me.onenote`, and all `kiota-*` packages must share one preview number or the build fails with `No matching export … registerDefaultDeserializer`.
-- **Alternatives considered**: plain `fetch` for both — saves ~900 KiB, loses typed calls and pagination models. Fallback only for Graph if the preview chain breaks; Google stays on its SDK.
+- **Decision**: `@googleapis/calendar` with a `rootUrl` seam; Microsoft Graph through `@microsoft/msgraph-sdk` + `-users` with `adapter.baseUrl` as the seam.
+- **Rationale**: typed request building and Provider pagination come for free; the seams let tests fake HTTP below the SDK instead of stubbing SDK methods. Graph requires implementing `AuthenticationProvider` over `McpContext`, importing `@microsoft/msgraph-sdk-users` to register `me.onenote`, and one kiota preview number for the whole resolution (`pnpm-workspace.yaml` overrides) or the bundle fails with `No matching export … registerDefaultDeserializer`.
+- **Alternatives considered**: plain `fetch` for both — saves ~860 KiB gzip, loses typed calls and pagination models. Fallback only for Google if its SDK breaks; Graph stays on its SDK.
 
 ## R6 — Account selection
 
@@ -76,7 +76,7 @@ All technical unknowns were resolved before this plan by `docs/SPEC.md` and ADR-
 
 ## R13 — Admin surface
 
-- **Decision**: server-rendered JSX via Hono, no client script; every mutation is `POST` + `303`; CSRF via `Origin`/`Sec-Fetch-Site` plus a double-submit `admin_csrf` cookie; revoke behind a confirmation page; test-a-tool runs in-process through the same handler as `/mcps/*`.
+- **Decision**: server-rendered JSX via Hono, no client script; every mutation is `POST` + `303`; CSRF via `Origin`/`Sec-Fetch-Site` plus a double-submit `admin_csrf` cookie; revoke behind a confirmation page; test-a-tool runs in-process through an in-memory MCP client session against the same server factory.
 - **Rationale**: no service token is stored in the Worker for self-`fetch`, and no client bundle is needed for one operator (Principle III, §15).
 - **Alternatives considered**: SPA (unnecessary build and auth surface); server `fetch` to own MCP endpoint (needs a service token in the Worker).
 

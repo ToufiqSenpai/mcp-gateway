@@ -160,26 +160,17 @@
       "indexes": {
         "accounts_mcp_slug": {
           "name": "accounts_mcp_slug",
-          "columns": [
-            "mcp",
-            "slug"
-          ],
+          "columns": ["mcp", "slug"],
           "isUnique": true
         },
         "accounts_identity": {
           "name": "accounts_identity",
-          "columns": [
-            "mcp",
-            "provider",
-            "provider_subject"
-          ],
+          "columns": ["mcp", "provider", "provider_subject"],
           "isUnique": true
         },
         "accounts_default": {
           "name": "accounts_default",
-          "columns": [
-            "mcp"
-          ],
+          "columns": ["mcp"],
           "isUnique": true,
           "where": "\"accounts\".\"is_default\" = 1"
         }
@@ -276,12 +267,8 @@
           "name": "oauth_states_target_account_id_accounts_id_fk",
           "tableFrom": "oauth_states",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "target_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["target_account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

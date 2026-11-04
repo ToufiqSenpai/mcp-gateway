@@ -9,7 +9,7 @@
   },
   "scripts": {
     "predev": "pnpm --filter @mcp-gateway/web css:build",
-    "dev": "wrangler dev --env-file .env",
+    "dev": "wrangler dev --env-file .env --infer-origin-from-routes=false",
     "build": "pnpm --filter @mcp-gateway/web css:build",
     "test": "pnpm -r test",
     "pretest": "pnpm --filter @mcp-gateway/web css:build",
@@ -22,12 +22,18 @@
     "predeploy": "pnpm --filter @mcp-gateway/web css:build",
     "deploy": "wrangler deploy"
   },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
+  },
   "devDependencies": {
+    "@oxlint/plugins": "1.91.0",
     "@tailwindcss/cli": "4.3.4",
     "@types/node": "26.6.6",
     "drizzle-kit": "0.31.11",
     "oxfmt": "0.76.0",
     "oxlint": "1.91.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "tailwindcss": "4.3.4",
     "typescript": "7.0.2",
     "vitest": "4.1.12",

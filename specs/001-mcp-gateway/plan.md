@@ -12,7 +12,7 @@ One Cloudflare Worker hosts two first-party MCP servers — `calendar` (Google C
 
 **Language/Version**: TypeScript 7.0.2, run on workerd with `compatibility_date: 2026-11-01`; `nodejs_compat` disabled.
 
-**Primary Dependencies**: Hono 4.13 (routing + JSX), jose (Access JWT verification), `@modelcontextprotocol/server` 2.4.0 (MCP `2026-07-28`, `createMcpHandler`), zod 4.6, arctic 3.7 (OAuth authorize/exchange/refresh), `@googleapis/calendar` 20.1.0 with gaxios 7.1.3, `@microsoft/msgraph-sdk` + `-users` 1.0.0-preview.92 with `@microsoft/kiota-bundle` 1.0.0-preview.112, drizzle-orm 0.45 / drizzle-kit 0.31, Tailwind v4 CLI. pnpm 12.16 workspaces, wrangler 4.157.
+**Primary Dependencies**: Hono 4.13 (routing + JSX), jose (Access JWT verification), `@modelcontextprotocol/server` 2.4.0 (MCP `2026-07-28`, `createMcpHandler`), `@modelcontextprotocol/hono` 2.0.2 (Host/Origin validation and body parsing), `@modelcontextprotocol/client` 2.4.0 (in-process test panel), zod 4.6, arctic 3.7 (OAuth authorize/exchange/refresh), `@googleapis/calendar` 20.1.0 with gaxios 7.1.3, `@microsoft/msgraph-sdk` + `-users` 1.0.0-preview.92 with `@microsoft/kiota-bundle` 1.0.0-preview.112, drizzle-orm 0.45 / drizzle-kit 0.31, Tailwind v4 CLI. pnpm 12.16 workspaces, wrangler 4.157.
 
 **Storage**: Cloudflare D1 (`accounts`, `oauth_states`) through Drizzle, migrations applied with `wrangler d1 migrations apply`; KV (`CACHE`) for container enumeration only, keyed by a per-Account epoch; Credentials encrypted in-row with AES-GCM.
 

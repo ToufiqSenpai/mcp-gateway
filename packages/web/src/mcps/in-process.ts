@@ -1,65 +1,59 @@
-import {
-  CLIENT_CAPABILITIES_META_KEY,
-  PROTOCOL_VERSION_META_KEY,
-  createMcpHandler,
-} from '@modelcontextprotocol/server';
-import { createMcpContext } from '../accounts/lifecycle';
-import type { Database } from '../db/client';
-import type { McpSlug } from '../db/schema';
-import type { Env } from '../env';
-import { MCP_REGISTRY } from './registry';
+import { Client } from "@modelcontextprotocol/client"
+import { InMemoryTransport, type CallToolResult, type JSONValue, type Tool } from "@modelcontextprotocol/server"
 
-const PROTOCOL_VERSION = '2026-07-28';
+import { createMcpContext } from "../accounts/lifecycle"
+import type { Database } from "../db/client"
+import type { McpSlug } from "../db/schema"
+import type { Env } from "../env"
+import { MCP_REGISTRY } from "./registry"
+
+/** Tool arguments as the admin textarea supplies them: a JSON object. */
+type ToolArguments = Record<string, JSONValue>
 
 /**
- * Runs one JSON-RPC exchange through the same handler `/mcps/*` uses. No self-fetch, so the
- * Worker never needs to store a service token for itself.
+ * Runs a tool through an in-memory MCP client session against the same server factory `/mcps/*`
+ * uses. No self-fetch, so the Worker never needs to store a service token for itself.
  */
-export async function runInProcess(
+export class InProcessRunner {
+  public constructor(
+    private readonly env: Env,
+    private readonly db: Database
+  ) {}
+
+  public listTools(mcp: McpSlug): Promise<Tool[]> {
+    return this.withClient(mcp, async client => (await client.listTools()).tools)
+  }
+
+  public callTool(mcp: McpSlug, name: string, args: ToolArguments): Promise<CallToolResult> {
+    return this.withClient(mcp, client => client.callTool({ name, arguments: args }))
+  }
+
+  private async withClient<T>(mcp: McpSlug, run: (client: Client) => Promise<T>): Promise<T> {
+    const server = MCP_REGISTRY[mcp].factory(createMcpContext(this.env, this.db, mcp))
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await server.connect(serverTransport)
+
+    const client = new Client({ name: "mcp-gateway-admin", version: "1.0.0" })
+    await client.connect(clientTransport)
+    try {
+      return await run(client)
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  }
+}
+
+export function listTools(env: Env, db: Database, mcp: McpSlug): Promise<Tool[]> {
+  return new InProcessRunner(env, db).listTools(mcp)
+}
+
+export function callTool(
   env: Env,
   db: Database,
   mcp: McpSlug,
-  body: { method: string; params?: Record<string, unknown> },
-): Promise<Record<string, unknown>> {
-  const handler = createMcpHandler(
-    () => MCP_REGISTRY[mcp].factory(createMcpContext(env, db, mcp)),
-    { legacy: 'reject', responseMode: 'json' },
-  );
-
-  const name = body.params?.['name'];
-  const request = new Request(`http://internal/mcps/${mcp}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'MCP-Protocol-Version': PROTOCOL_VERSION,
-      'Mcp-Method': body.method,
-      ...(typeof name === 'string' ? { 'Mcp-Name': name } : {}),
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: body.method,
-      params: {
-        ...body.params,
-        _meta: {
-          [PROTOCOL_VERSION_META_KEY]: PROTOCOL_VERSION,
-          [CLIENT_CAPABILITIES_META_KEY]: {},
-        },
-      },
-    }),
-  });
-
-  const response = await handler.fetch(request);
-  return (await response.json()) as Record<string, unknown>;
+  name: string,
+  args: ToolArguments
+): Promise<CallToolResult> {
+  return new InProcessRunner(env, db).callTool(mcp, name, args)
 }
-
-export async function listToolNames(
-  env: Env,
-  db: Database,
-  mcp: McpSlug,
-): Promise<{ name: string; title?: string; description?: string }[]> {
-  const reply = await runInProcess(env, db, mcp, { method: 'tools/list', params: {} });
-  const result = reply['result'] as { tools?: { name: string; title?: string; description?: string }[] };
-  return result.tools ?? [];
-}
-

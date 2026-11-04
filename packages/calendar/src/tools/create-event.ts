@@ -1,8 +1,7 @@
-import { z } from 'zod';
-import type { calendar_v3 } from '@googleapis/calendar';
-import { googleCalendar } from '../client';
-import { accountSlug } from '../context';
-import { toAttendeeList, toEvent } from '../map';
+import type { calendar_v3 } from "@googleapis/calendar"
+import { z } from "zod"
+
+import { toAttendeeList, toEvent } from "../map"
 import {
   accountSchema,
   attachmentSchema,
@@ -13,132 +12,111 @@ import {
   notificationLevelSchema,
   reminderSchema,
   sendUpdatesFor,
-  visibilitySchema,
-} from '../schemas';
-import { defineTool } from './helpers';
+  visibilitySchema
+} from "../schemas"
+import { defineTool } from "./helpers"
 
-const guestPermissionsSchema = z.enum(['modify', 'inviteOthers', 'seeOtherInvites']);
+const guestPermissionsSchema = z.enum(["modify", "inviteOthers", "seeOtherInvites"])
 
 function permissionsToBody(permissions: string[] | undefined): calendar_v3.Schema$Event {
-  if (!permissions) return {};
-  return {
-    ...(permissions.includes('modify') ? { guestsCanModify: true } : {}),
-    ...(permissions.includes('inviteOthers') ? { guestsCanInviteOthers: true } : {}),
-    ...(permissions.includes('seeOtherInvites') ? { guestsCanSeeOtherGuests: true } : {}),
-  };
+  const body: calendar_v3.Schema$Event = {}
+  if (!permissions) return body
+  if (permissions.includes("modify")) body.guestsCanModify = true
+  if (permissions.includes("inviteOthers")) body.guestsCanInviteOthers = true
+  if (permissions.includes("seeOtherInvites")) body.guestsCanSeeOtherGuests = true
+  return body
 }
 
+const inputSchema = z.object({
+  account: accountSchema,
+  summary: z.string(),
+  startTime: dateTimeSchema,
+  endTime: dateTimeSchema,
+  calendarId: z.string().optional(),
+  allDay: z.boolean().optional(),
+  addGoogleMeetUrl: z.boolean().optional(),
+  googleMeetUrl: z.string().optional(),
+  attendees: z.array(attendeeSchema).optional(),
+  attendeeEmails: z.array(z.email()).optional().describe("Deprecated. Use attendees."),
+  attachments: z.array(attachmentSchema).optional(),
+  availability: availabilitySchema.optional(),
+  colorId: z.string().optional(),
+  description: z.string().optional(),
+  eventType: eventTypeSchema.optional(),
+  guestPermissions: z.array(guestPermissionsSchema).optional(),
+  location: z.string().optional(),
+  notificationLevel: notificationLevelSchema.optional(),
+  overrideReminders: z.array(reminderSchema).optional(),
+  recurrenceData: z.array(z.string()).optional(),
+  timeZone: z.string().optional(),
+  visibility: visibilitySchema.optional(),
+  workingLocationProperties: z.record(z.string(), z.unknown()).optional()
+})
+
 export const createEventTool = defineTool(
-  'create_event',
+  "create_event",
   {
-    title: 'Create event',
+    title: "Create event",
     description:
-      'Creates an event and returns the full Event. notificationLevel defaults to ALL, which emails guests; REST defaults to sending nothing.',
-    inputSchema: z.object({
-      account: accountSchema,
-      summary: z.string(),
-      startTime: dateTimeSchema,
-      endTime: dateTimeSchema,
-      calendarId: z.string().optional(),
-      allDay: z.boolean().optional(),
-      addGoogleMeetUrl: z.boolean().optional(),
-      googleMeetUrl: z.string().optional(),
-      attendees: z.array(attendeeSchema).optional(),
-      attendeeEmails: z
-        .array(z.string())
-        .optional()
-        .describe('Deprecated. Use attendees.'),
-      attachments: z.array(attachmentSchema).optional(),
-      availability: availabilitySchema.optional(),
-      colorId: z.string().optional(),
-      description: z.string().optional(),
-      eventType: eventTypeSchema.optional(),
-      guestPermissions: z.array(guestPermissionsSchema).optional(),
-      location: z.string().optional(),
-      notificationLevel: notificationLevelSchema.optional(),
-      overrideReminders: z.array(reminderSchema).optional(),
-      recurrenceData: z.array(z.string()).optional(),
-      timeZone: z.string().optional(),
-      visibility: visibilitySchema.optional(),
-      workingLocationProperties: z.record(z.string(), z.unknown()).optional(),
-    }),
-    annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      "Creates an event and returns the full Event. notificationLevel defaults to ALL, which emails guests; REST defaults to sending nothing.",
+    inputSchema,
+    annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true }
   },
-  async (args, ctx) => {
-    const slug = await accountSlug(ctx, args.account);
-    const client = googleCalendar(ctx, slug);
+  async (args, context) => {
+    const slug = await context.resolve(args.account)
+    const client = context.calendar(slug)
 
-    const start = args.allDay
+    const start: calendar_v3.Schema$EventDateTime = args.allDay
       ? { date: args.startTime.slice(0, 10) }
-      : { dateTime: args.startTime, ...(args.timeZone ? { timeZone: args.timeZone } : {}) };
-    const end = args.allDay
+      : { dateTime: args.startTime }
+    const end: calendar_v3.Schema$EventDateTime = args.allDay
       ? { date: args.endTime.slice(0, 10) }
-      : { dateTime: args.endTime, ...(args.timeZone ? { timeZone: args.timeZone } : {}) };
+      : { dateTime: args.endTime }
+    if (!args.allDay && args.timeZone) {
+      start.timeZone = args.timeZone
+      end.timeZone = args.timeZone
+    }
 
-    const attendees =
-      toAttendeeList(args.attendees) ??
-      args.attendeeEmails?.map((email) => ({ email })) ??
-      undefined;
+    const attendees = toAttendeeList(args.attendees) ?? args.attendeeEmails?.map(email => ({ email })) ?? undefined
 
-    const conferenceData =
-      args.addGoogleMeetUrl || args.googleMeetUrl
-        ? {
-            ...(args.addGoogleMeetUrl
-              ? {
-                  createRequest: {
-                    requestId: crypto.randomUUID(),
-                    conferenceSolutionKey: { type: 'hangoutsMeet' },
-                  },
-                }
-              : {}),
-            ...(args.googleMeetUrl
-              ? {
-                  entryPoints: [
-                    { entryPointType: 'video', uri: args.googleMeetUrl },
-                  ],
-                }
-              : {}),
-          }
-        : undefined;
+    let conferenceData: calendar_v3.Schema$Event["conferenceData"] | undefined
+    if (args.addGoogleMeetUrl || args.googleMeetUrl) {
+      conferenceData = {}
+      if (args.addGoogleMeetUrl) {
+        conferenceData.createRequest = {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" }
+        }
+      }
+      if (args.googleMeetUrl) {
+        conferenceData.entryPoints = [{ entryPointType: "video", uri: args.googleMeetUrl }]
+      }
+    }
 
-    const requestBody: calendar_v3.Schema$Event = {
-      summary: args.summary,
-      start,
-      end,
-      ...(args.calendarId ? {} : {}),
-      ...(args.location ? { location: args.location } : {}),
-      ...(args.description ? { description: args.description } : {}),
-      ...(args.colorId ? { colorId: args.colorId } : {}),
-      ...(args.visibility ? { visibility: args.visibility } : {}),
-      ...(args.eventType ? { eventType: args.eventType } : {}),
-      ...(attendees ? { attendees } : {}),
-      ...(args.attachments ? { attachments: args.attachments } : {}),
-      ...(args.recurrenceData ? { recurrence: args.recurrenceData } : {}),
-      ...(args.overrideReminders
-        ? { reminders: { useDefault: false, overrides: args.overrideReminders } }
-        : {}),
-      ...(args.workingLocationProperties
-        ? {
-            workingLocationProperties:
-              args.workingLocationProperties as calendar_v3.Schema$EventWorkingLocationProperties,
-          }
-        : {}),
-      ...(args.availability === 'AVAILABILITY_FREE'
-        ? { transparency: 'transparent' }
-        : args.availability === 'AVAILABILITY_BUSY'
-          ? { transparency: 'opaque' }
-          : {}),
-      ...permissionsToBody(args.guestPermissions),
-      ...(conferenceData ? { conferenceData } : {}),
-    };
+    const requestBody: calendar_v3.Schema$Event = { summary: args.summary, start, end }
+    if (args.location) requestBody.location = args.location
+    if (args.description) requestBody.description = args.description
+    if (args.colorId) requestBody.colorId = args.colorId
+    if (args.visibility) requestBody.visibility = args.visibility
+    if (args.eventType) requestBody.eventType = args.eventType
+    if (attendees) requestBody.attendees = attendees
+    if (args.attachments) requestBody.attachments = args.attachments
+    if (args.recurrenceData) requestBody.recurrence = args.recurrenceData
+    if (args.overrideReminders) requestBody.reminders = { useDefault: false, overrides: args.overrideReminders }
+    if (args.workingLocationProperties) requestBody.workingLocationProperties = args.workingLocationProperties
+    if (args.availability === "AVAILABILITY_FREE") requestBody.transparency = "transparent"
+    if (args.availability === "AVAILABILITY_BUSY") requestBody.transparency = "opaque"
+    Object.assign(requestBody, permissionsToBody(args.guestPermissions))
+    if (conferenceData) requestBody.conferenceData = conferenceData
 
-    const response = await client.events.insert({
-      calendarId: args.calendarId ?? 'primary',
+    const params: calendar_v3.Params$Resource$Events$Insert = {
+      calendarId: args.calendarId ?? "primary",
       sendUpdates: sendUpdatesFor(args.notificationLevel),
-      ...(conferenceData ? { conferenceDataVersion: 1 } : {}),
-      requestBody,
-    });
+      requestBody
+    }
+    if (conferenceData) params.conferenceDataVersion = 1
+    const response = await client.events.insert(params)
 
-    return toEvent(response.data);
-  },
-);
+    return toEvent(response.data)
+  }
+)

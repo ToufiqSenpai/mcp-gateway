@@ -1,184 +1,204 @@
-import { CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
-import { env } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { REQUIRED_SCOPES } from '@mcp-gateway/calendar';
-import { encryptToken } from '../../src/auth/crypto';
-import { createDb, nowSeconds } from '../../src/db/client';
-import { insertAccount, updateAccount } from '../../src/db/queries';
-import { TEST_ORIGIN, appFetch, mcpJwt } from '../support/access';
-import { counters, resetProviderCounters } from '../support/providers';
+import { REQUIRED_SCOPES } from "@mcp-gateway/calendar"
+import { env } from "cloudflare:test"
+import { beforeEach, describe, expect, it } from "vitest"
+import { z } from "zod"
 
-const PROTOCOL_VERSION = '2026-07-28';
+import { TokenCipher } from "../../src/auth/crypto"
+import { AccountRepository } from "../../src/db/account-repository"
+import { createDb, nowSeconds } from "../../src/db/client"
+import { counters, resetProviderCounters } from "../support/providers"
+import { rpc } from "../support/rpc"
 
-function envelope(body: Record<string, unknown>): Record<string, unknown> {
-  const params = (body['params'] as Record<string, unknown> | undefined) ?? {};
-  return {
-    jsonrpc: '2.0',
-    id: 1,
-    ...body,
-    params: {
-      ...params,
-      _meta: {
-        [PROTOCOL_VERSION_META_KEY]: PROTOCOL_VERSION,
-        [CLIENT_CAPABILITIES_META_KEY]: {},
-      },
-    },
-  };
-}
+const cipher = new TokenCipher(env.TOKEN_ENCRYPTION_KEY)
 
-async function rpc(
-  body: Record<string, unknown>,
-  slug = 'calendar',
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const response = await appFetch(`${TEST_ORIGIN}/mcps/${slug}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'Cf-Access-Jwt-Assertion': await mcpJwt(),
-      'MCP-Protocol-Version': PROTOCOL_VERSION,
-      'Mcp-Method': String(body['method'] ?? ''),
-      ...(typeof (body['params'] as Record<string, unknown> | undefined)?.['uri'] === 'string'
-        ? { 'Mcp-Name': (body['params'] as Record<string, unknown>)['uri'] as string }
-        : {}),
-    },
-    body: JSON.stringify(envelope(body)),
-  });
-  const text = await response.text();
-  let json: Record<string, unknown> = {};
-  try {
-    json = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    json = { text };
-  }
-  return { status: response.status, json };
-}
+const Resource = z.object({ uri: z.string(), name: z.string(), mimeType: z.string() }).loose()
+
+const ListResult = z
+  .object({
+    resultType: z.string().optional(),
+    resources: z.array(Resource),
+    ttlMs: z.number().optional(),
+    cacheScope: z.string().optional(),
+    _meta: z.record(z.string(), z.json()).optional()
+  })
+  .loose()
+
+const ReadResult = z
+  .object({
+    contents: z.array(z.object({ uri: z.string(), mimeType: z.string(), text: z.string().optional() }).loose()),
+    ttlMs: z.number().optional()
+  })
+  .loose()
+
+const CalendarBody = z
+  .object({
+    account: z.string(),
+    calendar: z.object({ id: z.string() }).loose(),
+    window: z.object({ start: z.string(), end: z.string() }).loose(),
+    events: z.array(z.object({ summary: z.string().optional() }).loose()),
+    truncated: z.boolean()
+  })
+  .loose()
+
+const ErrorReply = z
+  .object({
+    code: z.number(),
+    message: z.string().optional(),
+    data: z.object({ uri: z.string().optional() }).loose().optional()
+  })
+  .loose()
+
+const ToolCallResult = z
+  .object({
+    isError: z.boolean().optional(),
+    content: z.array(z.object({ text: z.string().optional() }).loose()).optional(),
+    _meta: z.record(z.string(), z.json()).optional()
+  })
+  .loose()
+
+const CalendarListBody = z
+  .object({ calendars: z.array(z.object({ summary: z.string().optional() }).loose()) })
+  .loose()
 
 async function seedAccount(
-  state: 'active' | 'needs_reauth' = 'active',
+  state: "active" | "needs_reauth" = "active",
   cacheEpoch = 0,
+  slug = "personal",
+  providerSubject = "subject-1",
+  isDefault = 1
 ): Promise<string> {
-  const id = crypto.randomUUID();
-  await insertAccount(createDb(env), {
+  const id = crypto.randomUUID()
+  await new AccountRepository(createDb(env)).insert({
     id,
-    mcp: 'calendar',
-    slug: 'personal',
-    provider: 'google',
-    providerSubject: 'subject-1',
-    email: 'operator@example.com',
-    accessToken: await encryptToken(env.TOKEN_ENCRYPTION_KEY, 'ya29.access-one', id, 'access_token'),
-    refreshToken: await encryptToken(env.TOKEN_ENCRYPTION_KEY, '1//refresh-one', id, 'refresh_token'),
+    mcp: "calendar",
+    slug,
+    provider: "google",
+    providerSubject,
+    email: "operator@example.com",
+    accessToken: await cipher.encrypt("ya29.access-one", id, "access_token"),
+    refreshToken: await cipher.encrypt("1//refresh-one", id, "refresh_token"),
     accessTokenExpiresAt: nowSeconds() + 3600,
-    scopes: REQUIRED_SCOPES.join(' '),
+    scopes: REQUIRED_SCOPES.join(" "),
     state,
-    isDefault: 1,
+    isDefault,
     cacheEpoch,
-    lastError: state === 'needs_reauth' ? 'invalid_grant' : null,
+    lastError: state === "needs_reauth" ? "invalid_grant" : null,
     createdAt: 0,
-    updatedAt: 0,
-  });
-  return id;
+    updatedAt: 0
+  })
+  return id
 }
 
 beforeEach(async () => {
-  await env.DB.prepare('DELETE FROM oauth_states').run();
-  await env.DB.prepare('DELETE FROM accounts').run();
-  await env.CACHE.delete('v1:enum:calendar:personal:0');
-  await env.CACHE.delete('v1:enum:calendar:personal:1');
-});
+  await env.DB.prepare("DELETE FROM oauth_states").run()
+  await env.DB.prepare("DELETE FROM accounts").run()
+  await env.CACHE.delete("v1:enum:calendar:personal:0")
+  await env.CACHE.delete("v1:enum:calendar:personal:1")
+})
 
-describe('calendar resources', () => {
-  it('returns an empty list, never an error, when there are no Accounts', async () => {
-    const reply = await rpc({ method: 'resources/list', params: {} });
-    const result = reply.json['result'] as { resources: unknown[]; resultType: string };
-    expect(result.resources).toEqual([]);
-    expect(result.resultType).toBe('complete');
-  });
+describe("calendar resources", () => {
+  it("returns an empty list, never an error, when there are no Accounts", async () => {
+    const reply = await rpc({ method: "resources/list", params: {} })
+    const result = ListResult.parse(reply.reply.result)
+    expect(result.resources).toEqual([])
+    expect(result.resultType).toBe("complete")
+  })
 
-  it('lists one resource per calendar per usable Account', async () => {
-    await seedAccount();
-    const reply = await rpc({ method: 'resources/list', params: {} });
-    const result = reply.json['result'] as {
-      resources: { uri: string; name: string; mimeType: string }[];
-      ttlMs: number;
-      cacheScope: string;
-    };
+  it("lists one resource per calendar per usable Account", async () => {
+    await seedAccount()
+    const reply = await rpc({ method: "resources/list", params: {} })
+    const result = ListResult.parse(reply.reply.result)
 
-    const uris = result.resources.map((resource) => resource.uri);
-    expect(uris).toContain('calendar://personal/calendars/primary');
-    expect(uris).toContain('calendar://personal/calendars/team%40example.com');
-    expect(result.resources.every((resource) => resource.mimeType === 'application/json')).toBe(true);
-    expect(result.ttlMs).toBe(300_000);
-    expect(result.cacheScope).toBe('private');
-  });
+    const uris = result.resources.map(resource => resource.uri)
+    expect(uris).toContain("calendar://personal/calendars/primary")
+    expect(uris).toContain("calendar://personal/calendars/team%40example.com")
+    expect(result.resources.every(resource => resource.mimeType === "application/json")).toBe(true)
+    expect(result.ttlMs).toBe(300_000)
+    expect(result.cacheScope).toBe("private")
+  })
 
-  it('skips a sick Account, says so, and marks the listing uncacheable', async () => {
-    await seedAccount('needs_reauth', 1);
-    const reply = await rpc({ method: 'resources/list', params: {} });
-    const result = reply.json['result'] as {
-      resources: unknown[];
-      ttlMs: number;
-      _meta?: { 'mcp-gateway/skippedAccounts'?: string[] };
-    };
+  it("skips a sick Account, says so, and marks the listing uncacheable", async () => {
+    await seedAccount("needs_reauth", 1)
+    const reply = await rpc({ method: "resources/list", params: {} })
+    const result = ListResult.parse(reply.reply.result)
 
-    expect(result.resources).toEqual([]);
-    expect(result.ttlMs).toBe(0);
-    expect(result._meta?.['mcp-gateway/skippedAccounts']).toEqual(['personal']);
-  });
+    expect(result.resources).toEqual([])
+    expect(result.ttlMs).toBe(0)
+    expect(result._meta?.["mcp-gateway/skippedAccounts"]).toEqual(["personal"])
+  })
 
-  it('reads one calendar resource with a fixed one-week window', async () => {
-    await seedAccount();
+  it("reads one calendar resource with a fixed one-week window", async () => {
+    await seedAccount()
     const reply = await rpc({
-      method: 'resources/read',
-      params: { uri: 'calendar://personal/calendars/primary' },
-    });
-    const result = reply.json['result'] as {
-      contents: { uri: string; mimeType: string; text: string }[];
-      ttlMs: number;
-    };
+      method: "resources/read",
+      params: { uri: "calendar://personal/calendars/primary" }
+    })
+    const result = ReadResult.parse(reply.reply.result)
 
-    expect(result.contents).toHaveLength(1);
-    expect(result.contents[0]?.mimeType).toBe('application/json');
-    const body = JSON.parse(result.contents[0]?.text ?? '{}') as {
-      account: string;
-      calendar: { id: string };
-      window: { start: string; end: string };
-      events: { summary?: string }[];
-      truncated: boolean;
-    };
-    expect(body.account).toBe('personal');
-    expect(body.calendar.id).toBe('primary');
-    expect(Date.parse(body.window.end) - Date.parse(body.window.start)).toBe(7 * 24 * 3600 * 1000);
-    expect(body.events[0]?.summary).toBe('Standup');
-    expect(body.truncated).toBe(false);
-    expect(result.ttlMs).toBe(30_000);
-  });
+    expect(result.contents).toHaveLength(1)
+    expect(result.contents[0]?.mimeType).toBe("application/json")
+    const body = CalendarBody.parse(JSON.parse(result.contents[0]?.text ?? "{}"))
+    expect(body.account).toBe("personal")
+    expect(body.calendar.id).toBe("primary")
+    expect(Date.parse(body.window.end) - Date.parse(body.window.start)).toBe(7 * 24 * 3600 * 1000)
+    expect(body.events[0]?.summary).toBe("Standup")
+    expect(body.truncated).toBe(false)
+    expect(result.ttlMs).toBe(30_000)
+  })
 
-  it('answers an unknown container with -32602 carrying data.uri', async () => {
-
-    await seedAccount();
+  it("answers an unknown container with -32602 carrying data.uri", async () => {
+    await seedAccount()
     const reply = await rpc({
-      method: 'resources/read',
-      params: { uri: 'calendar://personal/calendars/does-not-exist' },
-    });
-    const error = reply.json['error'] as { code: number; data?: { uri?: string } };
-    expect(error.code).toBe(-32602);
-    expect(error.data?.uri).toBe('calendar://personal/calendars/does-not-exist');
-  });
+      method: "resources/read",
+      params: { uri: "calendar://personal/calendars/does-not-exist" }
+    })
+    const error = ErrorReply.parse(reply.reply.error)
 
-  it('serves the second enumeration from KV and misses again after an epoch bump', async () => {
-    const id = await seedAccount();
-    await env.CACHE.delete('v1:enum:calendar:personal:0');
-    resetProviderCounters();
+    expect(error.code).toBe(-32602)
+    expect(error.data?.uri).toBe("calendar://personal/calendars/does-not-exist")
+  })
 
-    await rpc({ method: 'resources/list', params: {} });
-    expect(counters.googleCalendarListRequests).toBe(1);
+  it("answers a sick Account with -32603 naming it, not a not-found", async () => {
+    await seedAccount()
+    await seedAccount("needs_reauth", 0, "work", "subject-2", 0)
+    const reply = await rpc({
+      method: "resources/read",
+      params: { uri: "calendar://work/calendars/primary" }
+    })
+    const error = ErrorReply.parse(reply.reply.error)
 
-    await rpc({ method: 'resources/list', params: {} });
-    expect(counters.googleCalendarListRequests).toBe(1);
+    expect(error.code).toBe(-32603)
+    expect(error.message).toContain("work")
+  })
 
-    await updateAccount(createDb(env), id, { cacheEpoch: 1 });
-    await rpc({ method: 'resources/list', params: {} });
-    expect(counters.googleCalendarListRequests).toBe(2);
-  });
-});
+  it("names the skipped Account in a list_calendars tool result", async () => {
+    await seedAccount()
+    await seedAccount("needs_reauth", 0, "work", "subject-2", 0)
+    const reply = await rpc({
+      method: "tools/call",
+      params: { name: "list_calendars", arguments: {} }
+    })
+    const result = ToolCallResult.parse(reply.reply.result)
 
+    expect(result.isError).toBeUndefined()
+    expect(result._meta?.["mcp-gateway/skippedAccounts"]).toEqual(["work"])
+    const body = CalendarListBody.parse(JSON.parse(result.content?.[0]?.text ?? "{}"))
+    expect(body.calendars.map(calendar => calendar.summary)).toContain("Primary")
+  })
+
+  it("serves the second enumeration from KV and misses again after an epoch bump", async () => {
+    const id = await seedAccount()
+    await env.CACHE.delete("v1:enum:calendar:personal:0")
+    resetProviderCounters()
+
+    await rpc({ method: "resources/list", params: {} })
+    expect(counters.googleCalendarListRequests).toBe(1)
+
+    await rpc({ method: "resources/list", params: {} })
+    expect(counters.googleCalendarListRequests).toBe(1)
+
+    await new AccountRepository(createDb(env)).update(id, { cacheEpoch: 1 })
+    await rpc({ method: "resources/list", params: {} })
+    expect(counters.googleCalendarListRequests).toBe(2)
+  })
+})

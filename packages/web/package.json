@@ -9,14 +9,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@mcp-gateway/common": "workspace:*",
     "@mcp-gateway/calendar": "workspace:*",
     "@mcp-gateway/notes": "workspace:*",
-    "@modelcontextprotocol/server": "2.4.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/hono": "2.0.2",
     "arctic": "3.7.0",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.16",
-    "jose": "6.2.15",
-    "zod": "4.6.7"
+    "jose": "6.2.15"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.23.0",

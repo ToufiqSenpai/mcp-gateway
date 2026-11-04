@@ -18,8 +18,10 @@ npx wrangler d1 create mcp-gateway      # copy database_id into wrangler.jsonc
 npx wrangler kv namespace create CACHE  # copy id into wrangler.jsonc
 ```
 
-Set the custom hostname in `routes`, keep `workers_dev: false` and `preview_urls: false`.
-Access cannot protect `*.workers.dev`, so there is no preview deployment path.
+Set the custom hostname in `routes` and the same value (no scheme or port) in
+`vars.PUBLIC_HOSTNAME`; the MCP surface validates `Host` and `Origin` against it. Keep
+`workers_dev: false` and `preview_urls: false`. Access cannot protect `*.workers.dev`, so
+there is no preview deployment path.
 
 ## 3. Access applications
 
@@ -63,7 +65,11 @@ Generate the encryption key with `openssl rand -base64 32`. Losing it means ever
 be reauthorized; changing it is the same operation.
 
 For local development copy `.env.example` to `.env`, fill the same names, and keep
-`ENVIRONMENT=development`. The dev bypass only activates on localhost and shows a banner.
+`ENVIRONMENT=development` and `PUBLIC_HOSTNAME=localhost` (hostname only, no port). Both
+override `wrangler.jsonc` in local dev. `pnpm dev` passes
+`--infer-origin-from-routes=false`, so the Worker sees `http://localhost:8787` and the dev
+bypass activates; without that flag the Worker sees the `routes` hostname and every request
+is `401`. The bypass shows a banner on every admin page.
 
 ## 6. Migrations and deploy
 

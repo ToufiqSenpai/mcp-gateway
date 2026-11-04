@@ -136,9 +136,9 @@ pnpm workspace, one deployable and two libraries ([plan.md](./plan.md)):
 
 ### Implementation for User Story 3
 
-- [X] T052 [US3] Add `@microsoft/msgraph-sdk`, `@microsoft/msgraph-sdk-users` and `@microsoft/kiota-bundle` at one shared preview number to `packages/notes/package.json`; document the preview-pin rule in `packages/notes/src/client.ts`
+- [X] T052 [US3] Add `@microsoft/msgraph-sdk`, `@microsoft/msgraph-sdk-users` and `@microsoft/kiota-abstractions` to `packages/notes/package.json`; pin every kiota package to one preview number in `pnpm-workspace.yaml`
 - [X] T053 [P] [US3] Define the `notes` Required scope set constant in `packages/notes/src/index.ts`: `offline_access User.Read Notes.ReadWrite`
-- [X] T054 [US3] Implement the Graph client seam in `packages/notes/src/client.ts`: `adapter.baseUrl`, bearer from `getAccessToken`, `me.onenote` registration, defensive error parsing of `{ error: { code, message, innerError } }`
+- [X] T054 [US3] Implement the Graph client in `packages/notes/src/client.ts`: `GraphRequestAdapter` + `createGraphServiceClient`, a `McpContext`-backed `AuthenticationProvider`, `adapter.baseUrl`, `me.onenote` registration, `odataNextLink` paging, and `GraphError` translated from `ODataError`
 - [X] T055 [US3] Implement `list_notebooks`, `list_sections` (exactly one parent, else `-32602`; `notebookId` = direct sections only; no parent = all including nested) and `list_pages` in `packages/notes/src/tools/`, with the shared cursor
 - [X] T056 [US3] Implement `get_page` in `packages/notes/src/tools/get-page.ts`: HTML verbatim, optional `includeIds`, content capped at 100 000 chars cut at the last complete tag boundary, `contentLength` full length, `truncated` flag
 - [X] T057 [US3] Implement `search_pages` in `packages/notes/src/tools/search-pages.ts`: non-empty query, case-insensitive substring on the page title only

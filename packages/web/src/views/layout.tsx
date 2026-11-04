@@ -1,9 +1,9 @@
-import type { Child } from 'hono/jsx';
+import type { Child } from "hono/jsx"
 
 export interface LayoutProps {
-  title: string;
-  devBypass?: boolean;
-  children: Child;
+  title: string
+  devBypass?: boolean
+  children: Child
 }
 
 export function Layout({ title, devBypass, children }: LayoutProps) {
@@ -31,5 +31,5 @@ export function Layout({ title, devBypass, children }: LayoutProps) {
         <main class="mx-auto max-w-4xl px-4 py-8">{children}</main>
       </body>
     </html>
-  );
+  )
 }
