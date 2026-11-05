@@ -12,7 +12,8 @@ const GOOGLE_GRANTED_SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
-  "https://www.googleapis.com/auth/calendar"
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/spreadsheets"
 ] as const
 export const ACCESS_TEAM_DOMAIN = "https://test.cloudflareaccess.com"
 
@@ -51,6 +52,9 @@ class TokenRequestLog {
 }
 
 export const lastTokenRequest = new TokenRequestLog()
+
+/** The last Google Sheets API request, for URL, method, bearer and body assertions. */
+export const lastSheetsRequest = { url: "", method: "", authorization: "", body: "" }
 
 /** Counters for concurrency assertions; reset with `resetProviderCounters()`. */
 export const counters = {
@@ -305,7 +309,51 @@ function graphIdentity(url: URL, bearer: string): Response {
   return json(404, { error: { code: "itemNotFound", message: "not found" } })
 }
 
-function googleApi(url: URL): Response {
+function sheetsApi(url: URL, request: Request, body: string): Response {
+  lastSheetsRequest.url = request.url
+  lastSheetsRequest.method = request.method
+  lastSheetsRequest.authorization = request.headers.get("Authorization") ?? ""
+  lastSheetsRequest.body = body
+
+  if (url.pathname === "/v4/spreadsheets") {
+    return json(200, {
+      spreadsheetId: "created-sheet",
+      spreadsheetUrl: "https://docs.google.com/spreadsheets/d/created-sheet/edit",
+      properties: { title: "Ledger" }
+    })
+  }
+  if (url.pathname.endsWith(":batchUpdate")) {
+    return json(200, { spreadsheetId: "sheet-1", replies: [{}] })
+  }
+  if (url.pathname.includes("/values/")) {
+    if (request.method === "PUT") {
+      return json(200, {
+        spreadsheetId: "sheet-1",
+        updatedRange: "Sheet1!A1:B2",
+        updatedRows: 2,
+        updatedColumns: 2,
+        updatedCells: 4
+      })
+    }
+    return json(200, {
+      range: "Sheet1!A1:B10",
+      majorDimension: "ROWS",
+      values: [
+        ["Item", "Qty"],
+        ["Widget", 2]
+      ]
+    })
+  }
+  const spreadsheetId = decodeURIComponent(url.pathname.split("/")[3] ?? "") || "sheet-1"
+  return json(200, {
+    spreadsheetId,
+    properties: { title: "Ledger", locale: "en_US" },
+    sheets: [{ properties: { sheetId: 0, title: "Sheet1" } }]
+  })
+}
+
+function googleApi(url: URL, request: Request, body: string): Response {
+  if (url.pathname.startsWith("/v4/spreadsheets")) return sheetsApi(url, request, body)
   if (url.pathname === "/calendar/v3/users/me/calendarList") {
     counters.googleCalendarListRequests += 1
     return json(200, {
@@ -344,7 +392,8 @@ function googleApi(url: URL): Response {
 async function route(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const raw = await request.clone().arrayBuffer()
-  const body = new URLSearchParams(new TextDecoder().decode(raw))
+  const text = new TextDecoder().decode(raw)
+  const body = new URLSearchParams(text)
   const bearer = bearerToken(request)
 
   switch (url.origin) {
@@ -361,7 +410,7 @@ async function route(request: Request): Promise<Response> {
       return graphIdentity(url, bearer)
 
     case "https://www.googleapis.com":
-      return googleApi(url)
+      return googleApi(url, request, text)
 
     default:
       return json(599, { error: "unmocked_outbound_request", url: request.url })

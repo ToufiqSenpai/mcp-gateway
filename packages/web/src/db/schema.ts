@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm"
 import { check, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 /** The MCP enum. Adding an MCP means a migration; the registry test keeps the two in step. */
-export const MCP_SLUGS = ["calendar", "notes"] as const
+export const MCP_SLUGS = ["calendar", "notes", "sheets"] as const
 export type McpSlug = (typeof MCP_SLUGS)[number]
 
 export const PROVIDERS = ["google", "microsoft"] as const
@@ -42,7 +42,7 @@ export const accounts = sqliteTable(
     uniqueIndex("accounts_default")
       .on(t.mcp)
       .where(sql`${t.isDefault} = 1`),
-    check("accounts_mcp_enum", sql`${t.mcp} IN ('calendar', 'notes')`),
+    check("accounts_mcp_enum", sql`${t.mcp} IN ('calendar', 'notes', 'sheets')`),
     check("accounts_provider_enum", sql`${t.provider} IN ('google', 'microsoft')`),
     check("accounts_state_enum", sql`${t.state} IN ('active', 'needs_reauth', 'revoked')`),
     check(
@@ -51,7 +51,7 @@ export const accounts = sqliteTable(
     ),
     check(
       "accounts_provider_pairing",
-      sql`((${t.mcp} = 'calendar' AND ${t.provider} = 'google') OR (${t.mcp} = 'notes' AND ${t.provider} = 'microsoft'))`
+      sql`((${t.mcp} = 'calendar' AND ${t.provider} = 'google') OR (${t.mcp} = 'notes' AND ${t.provider} = 'microsoft') OR (${t.mcp} = 'sheets' AND ${t.provider} = 'google'))`
     )
   ]
 )
@@ -69,7 +69,7 @@ export const oauthStates = sqliteTable(
     expiresAt: integer("expires_at").notNull()
   },
   t => [
-    check("oauth_states_mcp_enum", sql`${t.mcp} IN ('calendar', 'notes')`),
+    check("oauth_states_mcp_enum", sql`${t.mcp} IN ('calendar', 'notes', 'sheets')`),
     check("oauth_states_provider_enum", sql`${t.provider} IN ('google', 'microsoft')`)
   ]
 )

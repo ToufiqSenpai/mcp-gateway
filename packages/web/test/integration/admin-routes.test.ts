@@ -1,4 +1,5 @@
-import { REQUIRED_SCOPES } from "@mcp-gateway/calendar"
+import { REQUIRED_SCOPES as CALENDAR_SCOPES } from "@mcp-gateway/calendar"
+import { REQUIRED_SCOPES as SHEETS_SCOPES } from "@mcp-gateway/sheets"
 import { env } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
 
@@ -6,6 +7,7 @@ import { TokenCipher } from "../../src/auth/crypto"
 import { AccountRepository } from "../../src/db/account-repository"
 import { nowSeconds } from "../../src/db/client"
 import { TEST_ORIGIN, TestBrowser, adminJwt, appFetch, csrfFromPage } from "../support/access"
+import { ACCESS_TOKEN } from "../support/providers"
 
 const cipher = new TokenCipher(env.TOKEN_ENCRYPTION_KEY)
 
@@ -13,11 +15,11 @@ const SECRET_SUBJECT = "provider-subject-must-never-render"
 const ACCESS_PLAINTEXT = "ya29.plaintext-access-token"
 const REFRESH_PLAINTEXT = "1//plaintext-refresh-token"
 
-async function seedAccount(): Promise<void> {
+async function seedAccount(mcp: "calendar" | "sheets" = "calendar"): Promise<void> {
   const id = crypto.randomUUID()
   await new AccountRepository(env).insert({
     id,
-    mcp: "calendar",
+    mcp,
     slug: "personal",
     provider: "google",
     providerSubject: SECRET_SUBJECT,
@@ -26,7 +28,7 @@ async function seedAccount(): Promise<void> {
     accessToken: await cipher.encrypt(ACCESS_PLAINTEXT, id, "access_token"),
     refreshToken: await cipher.encrypt(REFRESH_PLAINTEXT, id, "refresh_token"),
     accessTokenExpiresAt: nowSeconds() + 3600,
-    scopes: REQUIRED_SCOPES.join(" "),
+    scopes: (mcp === "sheets" ? SHEETS_SCOPES : CALENDAR_SCOPES).join(" "),
     state: "active",
     isDefault: 1,
     lastError: "invalid_grant",
@@ -57,6 +59,7 @@ describe("admin routes", () => {
     expect(home.status).toBe(200)
     expect(homeHtml).toContain("/mcps/calendar")
     expect(homeHtml).toContain("/mcps/notes")
+    expect(homeHtml).toContain("/mcps/sheets")
     expect(homeHtml).not.toContain("<table")
 
     const page = await browser.get("/admin/mcps/calendar")
@@ -142,32 +145,51 @@ describe("admin routes", () => {
 })
 
 describe("redaction", () => {
-  it("never renders a Credential, key, subject or JWT on any admin page", async () => {
+  function expectRedacted(html: string): void {
+    expect(html).not.toContain(ACCESS_PLAINTEXT)
+    expect(html).not.toContain(REFRESH_PLAINTEXT)
+    expect(html).not.toContain(ACCESS_TOKEN.googleOk)
+    expect(html).not.toContain(SECRET_SUBJECT)
+    expect(html).not.toMatch(/v[12]\./)
+    expect(html).not.toContain(env.TOKEN_ENCRYPTION_KEY)
+    expect(html).not.toContain("test-google-client-secret")
+    expect(html).not.toContain("eyJ")
+  }
+
+  it("never renders a Credential, key, subject or provider body on admin pages or tool results", async () => {
     await seedAccount()
+    await seedAccount("sheets")
     const browser = new TestBrowser()
 
     const pages = [
       "/admin",
       "/admin/mcps/calendar",
       "/admin/mcps/notes",
+      "/admin/mcps/sheets",
       "/admin/mcps/calendar/test",
+      "/admin/mcps/sheets/test",
       "/admin/mcps/calendar/accounts/personal/revoke",
       "/admin/mcps/calendar?added=personal",
+      "/admin/mcps/sheets?added=personal",
       "/admin/mcps/calendar?error=duplicate&slug=personal",
       "/admin?error=state"
     ]
 
     for (const path of pages) {
       const response = await browser.get(path)
-      const html = await response.text()
-      expect(html).not.toContain(ACCESS_PLAINTEXT)
-      expect(html).not.toContain(REFRESH_PLAINTEXT)
-      expect(html).not.toContain(SECRET_SUBJECT)
-      expect(html).not.toMatch(/v[12]\./)
-      expect(html).not.toContain(env.TOKEN_ENCRYPTION_KEY)
-      expect(html).not.toContain("test-google-client-secret")
-      expect(html).not.toContain("eyJ")
+      expectRedacted(await response.text())
     }
+
+    const csrf = await csrfFromPage(browser, "/admin/mcps/sheets")
+    const response = await browser.postForm("/admin/mcps/sheets/test", {
+      _csrf: csrf,
+      tool: "get_values",
+      args: JSON.stringify({ spreadsheetId: "sheet-1", range: "Sheet1!A1:B10" })
+    })
+    expect(response.status).toBe(200)
+    const html = await response.text()
+    expect(html).toContain("Sheet1!A1:B10")
+    expectRedacted(html)
   })
 
   it("answers a 500 without a stack trace", async () => {

@@ -1,0 +1,140 @@
+{
+  "get_values": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to retrieve data from"
+      },
+      "range": {
+        "type": "string",
+        "description": "A1 or R1C1 range, e.g. Sheet1!A1:B10"
+      }
+    },
+    "required": ["spreadsheetId", "range"]
+  },
+  "get_spreadsheet": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to request"
+      },
+      "includeGridData": {
+        "type": "boolean",
+        "default": false,
+        "description": "Return grid data; default false"
+      },
+      "fields": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Hierarchical field masks, e.g. sheets.properties.sheetId; joined with ,"
+      },
+      "commentsIncluded": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include comments; default false"
+      },
+      "ranges": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "A1/R1C1 ranges; omitted means the whole spreadsheet"
+      }
+    },
+    "required": ["spreadsheetId"]
+  },
+  "update_spreadsheet": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to update"
+      },
+      "requests": {
+        "type": "array",
+        "items": { "type": "object" },
+        "description": "Any documented spreadsheets.batchUpdate Request; applied in order"
+      },
+      "writeControl": {
+        "type": "object",
+        "properties": {
+          "requiredRevisionId": {
+            "type": "string",
+            "description": "Rejects the write when the revision is stale"
+          }
+        },
+        "description": "{ requiredRevisionId?: string }"
+      }
+    },
+    "required": ["spreadsheetId", "requests"]
+  },
+  "update_values": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to update"
+      },
+      "range": {
+        "type": "string",
+        "description": "A1 range, e.g. Sheet1!A1:B2"
+      },
+      "values": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": { "type": ["string", "number", "boolean", "null"] }
+        },
+        "description": "Row-major; booleans, strings, numbers; null skipped; \"\" clears"
+      }
+    },
+    "required": ["spreadsheetId", "range", "values"]
+  },
+  "update_formulas": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to update"
+      },
+      "range": {
+        "type": "string",
+        "description": "A1 range, e.g. Sheet1!C1:C2"
+      },
+      "formulas": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "description": "Formula strings, e.g. [[\"=A1+B1\"], [\"=A2+B2\"]]"
+      }
+    },
+    "required": ["spreadsheetId", "range", "formulas"]
+  },
+  "insert_dimension": {
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The ID of the spreadsheet to update"
+      },
+      "sheetId": {
+        "type": "integer",
+        "description": "The sheet to insert into"
+      },
+      "dimension": {
+        "type": "string",
+        "enum": ["ROWS", "COLUMNS", "DIMENSION_UNSPECIFIED"],
+        "description": "The dimension to insert"
+      },
+      "startIndex": {
+        "type": "integer",
+        "description": "0-based, inclusive"
+      },
+      "endIndex": {
+        "type": "integer",
+        "description": "0-based, exclusive"
+      },
+      "inheritFromBefore": {
+        "type": "boolean",
+        "description": "true requires startIndex > 0"
+      }
+    },
+    "required": ["spreadsheetId", "sheetId", "dimension", "startIndex", "endIndex"]
+  }
+}

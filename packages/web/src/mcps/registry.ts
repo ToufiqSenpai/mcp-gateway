@@ -1,6 +1,7 @@
 import { CalendarServer } from "@mcp-gateway/calendar"
 import type { McpContext } from "@mcp-gateway/common"
 import { NotesServer } from "@mcp-gateway/notes"
+import { SheetsServer } from "@mcp-gateway/sheets"
 /** The only map from slug to MCP server factory (ADR-0006). Every MCP is a library in this
  * workspace — there is no Worker per MCP — so this file is the entire MCP list. Adding an
  * MCP means a new package, an entry here, and a migration on the `mcp` CHECK enum; a test
@@ -21,7 +22,8 @@ export interface McpDefinition {
 
 export const MCP_REGISTRY = {
   calendar: { factory: ctx => new CalendarServer(ctx).build(), provider: "google" },
-  notes: { factory: ctx => new NotesServer(ctx).build(), provider: "microsoft" }
+  notes: { factory: ctx => new NotesServer(ctx).build(), provider: "microsoft" },
+  sheets: { factory: ctx => new SheetsServer(ctx).build(), provider: "google" }
 } satisfies Record<McpSlug, McpDefinition>
 
 export function isMcpSlug(value: string): value is McpSlug {

@@ -14,6 +14,7 @@
     "@mcp-gateway/common": "workspace:*",
     "@mcp-gateway/calendar": "workspace:*",
     "@mcp-gateway/notes": "workspace:*",
+    "@mcp-gateway/sheets": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/hono": "2.0.2",
     "drizzle-orm": "0.45.4",

@@ -4,6 +4,7 @@
     { "path": "packages/common" },
     { "path": "packages/calendar" },
     { "path": "packages/notes" },
+    { "path": "packages/sheets" },
     { "path": "packages/web" }
   ]
 }

@@ -1,9 +1,10 @@
 # MCP Gateway
 
 A single-user gateway on Cloudflare Workers that hosts first-party MCP servers under
-`/mcps/<slug>`. Two MCPs ship today: `calendar` (Google Calendar) and `notes`
-(Microsoft Graph OneNote). Each MCP supports several accounts, a per-MCP Default Account
-and per-request account selection, plus MCP resources and prompts.
+`/mcps/<slug>`. Three MCPs ship today: `calendar` (Google Calendar), `notes`
+(Microsoft Graph OneNote) and `sheets` (Google Sheets). Each MCP supports several accounts, a
+per-MCP Default Account and per-request account selection; `calendar` and `notes` also expose
+MCP resources and prompts.
 
 **Status:** v1 implemented. The decisions that are hard to reverse are recorded in
 [docs/adr/](docs/adr/).
@@ -24,13 +25,13 @@ and per-request account selection, plus MCP resources and prompts.
 ## Architecture
 
 ```
-MCP client ──service token──► /mcps/:slug ──► registry ──► CalendarServer / NotesServer
+MCP client ──service token──► /mcps/:slug ──► registry ──► CalendarServer / NotesServer / SheetsServer
 Browser    ──Access session─► /admin*, /oauth/* ──► admin router + OAuth callbacks
 ```
 
 One Worker, one deployable. A pnpm workspace splits the code into the Worker
 (`packages/web`, which owns D1, KV, accounts, credentials and refresh) and one library per
-MCP (`packages/calendar`, `packages/notes`). MCP packages never touch D1 or the OAuth
+MCP (`packages/calendar`, `packages/notes`, `packages/sheets`). MCP packages never touch D1 or the OAuth
 client — they receive an `McpContext` with token and cursor access
 ([ADR-0006](docs/adr/0006-mcp-servers-as-libraries.md)).
 
