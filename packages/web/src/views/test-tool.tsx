@@ -52,7 +52,7 @@ export function TestToolPage({ mcp, tools, accounts, csrf, devBypass, result, er
           </label>
           <select id="tool" name="tool" class="rounded border border-slate-300 px-2 py-1 text-sm">
             {tools.map(tool => (
-              <option value={tool.name}>
+              <option key={tool.name} value={tool.name}>
                 {tool.name}
                 {WRITE_TOOLS.has(tool.name) ? " (write)" : ""}
               </option>
@@ -66,7 +66,9 @@ export function TestToolPage({ mcp, tools, accounts, csrf, devBypass, result, er
           <select id="account" name="account" class="rounded border border-slate-300 px-2 py-1 text-sm">
             <option value="">Default Account{defaultAccount ? ` (${defaultAccount})` : ""}</option>
             {accounts.map(account => (
-              <option value={account.slug}>{account.slug}</option>
+              <option key={account.slug} value={account.slug}>
+                {account.slug}
+              </option>
             ))}
           </select>
         </div>

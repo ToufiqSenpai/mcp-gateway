@@ -270,75 +270,98 @@ function graphMe(accessToken: string): Response {
   })
 }
 
+function bearerToken(request: Request): string {
+  const authorization = request.headers.get("Authorization") ?? ""
+  return authorization.startsWith("Bearer ") ? authorization.slice(7) : ""
+}
+
+function googleOAuth(url: URL, request: Request, body: URLSearchParams): Response {
+  if (url.pathname === "/token" && request.method === "POST") {
+    counters.googleTokenRequests += 1
+    lastTokenRequest.body = body
+    lastTokenRequest.url = request.url
+    return body.get("grant_type") === "refresh_token" ? refresh(body, false) : exchangeGoogle(body)
+  }
+  if (url.pathname === "/revoke") return json(200, {})
+  return json(404, { error: "not_found" })
+}
+
+function googleIdentity(url: URL, bearer: string): Response {
+  if (url.pathname === "/v1/userinfo") return userinfo(bearer)
+  return json(404, { error: "not_found" })
+}
+
+function microsoftOAuth(url: URL, request: Request, body: URLSearchParams): Response {
+  if (url.pathname.endsWith("/oauth2/v2.0/token") && request.method === "POST") {
+    lastTokenRequest.body = body
+    lastTokenRequest.url = request.url
+    return body.get("grant_type") === "refresh_token" ? refresh(body, true) : exchangeMicrosoft(body)
+  }
+  return json(404, { error: "not_found" })
+}
+
+function graphIdentity(url: URL, bearer: string): Response {
+  if (url.pathname === "/v1.0/me") return graphMe(bearer)
+  return json(404, { error: { code: "itemNotFound", message: "not found" } })
+}
+
+function googleApi(url: URL): Response {
+  if (url.pathname === "/calendar/v3/users/me/calendarList") {
+    counters.googleCalendarListRequests += 1
+    return json(200, {
+      items: [
+        { id: "primary", summary: "Primary", timeZone: "UTC" },
+        { id: "team@example.com", summary: "Team", timeZone: "UTC" }
+      ]
+    })
+  }
+  if (url.pathname.startsWith("/calendar/v3/users/me/calendarList/")) {
+    const id = decodeURIComponent(url.pathname.slice("/calendar/v3/users/me/calendarList/".length))
+    if (id === "primary" || id === "team@example.com") {
+      return json(200, { id, summary: id === "primary" ? "Primary" : "Team", timeZone: "UTC" })
+    }
+    return json(404, { error: { code: 404, message: "Not Found" } })
+  }
+  if (url.pathname.includes("/events")) {
+    return json(200, {
+      summary: "Primary",
+      timeZone: "UTC",
+      accessRole: "owner",
+      defaultReminders: [],
+      items: [
+        {
+          id: "event-1",
+          summary: "Standup",
+          start: { dateTime: "2026-11-05T09:00:00Z" },
+          end: { dateTime: "2026-11-05T09:15:00Z" }
+        }
+      ]
+    })
+  }
+  return json(404, { error: { code: 404, message: "not found" } })
+}
+
 async function route(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const raw = await request.clone().arrayBuffer()
   const body = new URLSearchParams(new TextDecoder().decode(raw))
-  const authorization = request.headers.get("Authorization") ?? ""
-  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : ""
+  const bearer = bearerToken(request)
 
   switch (url.origin) {
     case "https://oauth2.googleapis.com":
-      if (url.pathname === "/token" && request.method === "POST") {
-        counters.googleTokenRequests += 1
-        lastTokenRequest.body = body
-        lastTokenRequest.url = request.url
-        return body.get("grant_type") === "refresh_token" ? refresh(body, false) : exchangeGoogle(body)
-      }
-      if (url.pathname === "/revoke") return json(200, {})
-      return json(404, { error: "not_found" })
+      return googleOAuth(url, request, body)
 
     case "https://openidconnect.googleapis.com":
-      if (url.pathname === "/v1/userinfo") return userinfo(bearer)
-      return json(404, { error: "not_found" })
+      return googleIdentity(url, bearer)
 
     case "https://login.microsoftonline.com":
-      if (url.pathname.endsWith("/oauth2/v2.0/token") && request.method === "POST") {
-        lastTokenRequest.body = body
-        lastTokenRequest.url = request.url
-        return body.get("grant_type") === "refresh_token" ? refresh(body, true) : exchangeMicrosoft(body)
-      }
-      return json(404, { error: "not_found" })
+      return microsoftOAuth(url, request, body)
 
     case "https://graph.microsoft.com":
-      if (url.pathname === "/v1.0/me") return graphMe(bearer)
-      return json(404, { error: { code: "itemNotFound", message: "not found" } })
+      return graphIdentity(url, bearer)
 
-    case "https://www.googleapis.com": {
-      if (url.pathname === "/calendar/v3/users/me/calendarList") {
-        counters.googleCalendarListRequests += 1
-        return json(200, {
-          items: [
-            { id: "primary", summary: "Primary", timeZone: "UTC" },
-            { id: "team@example.com", summary: "Team", timeZone: "UTC" }
-          ]
-        })
-      }
-      if (url.pathname.startsWith("/calendar/v3/users/me/calendarList/")) {
-        const id = decodeURIComponent(url.pathname.slice("/calendar/v3/users/me/calendarList/".length))
-        if (id === "primary" || id === "team@example.com") {
-          return json(200, { id, summary: id === "primary" ? "Primary" : "Team", timeZone: "UTC" })
-        }
-        return json(404, { error: { code: 404, message: "Not Found" } })
-      }
-      if (url.pathname.includes("/events")) {
-        return json(200, {
-          summary: "Primary",
-          timeZone: "UTC",
-          accessRole: "owner",
-          defaultReminders: [],
-          items: [
-            {
-              id: "event-1",
-              summary: "Standup",
-              start: { dateTime: "2026-11-05T09:00:00Z" },
-              end: { dateTime: "2026-11-05T09:15:00Z" }
-            }
-          ]
-        })
-      }
-      return json(404, { error: { code: 404, message: "not found" } })
-    }
+    case "https://www.googleapis.com":
+      return googleApi(url)
 
     default:
       return json(599, { error: "unmocked_outbound_request", url: request.url })
@@ -355,7 +378,6 @@ export function installFetchRouter(accessJwks: () => Promise<JsonWebKey[]>): voi
   if (installed) return
   installed = true
 
-  const realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
 
@@ -366,7 +388,6 @@ export function installFetchRouter(accessJwks: () => Promise<JsonWebKey[]>): voi
     const mocked = await route(request)
     if (mocked.status !== 599) return mocked
     // Unmocked origins fail loudly instead of reaching the network.
-    void realFetch
     return mocked
   }
 }

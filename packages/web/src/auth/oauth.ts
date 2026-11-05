@@ -129,7 +129,9 @@ export abstract class OAuthProvider {
   }
 
   /** Providers without a revocation endpoint change nothing. */
-  public async revoke(_token: string): Promise<void> {}
+  public revoke(_token: string): Promise<void> {
+    return Promise.resolve()
+  }
 
   protected authorizationParams(_scopes: readonly string[]): ReadonlyMap<string, string> {
     return new Map()

@@ -23,7 +23,7 @@ import appCss from "../admin/app.generated.css"
 function buildHash(css: string): string {
   let hash = 0x811c9dc5
   for (let index = 0; index < css.length; index += 1) {
-    hash ^= css.charCodeAt(index)
+    hash ^= css.codePointAt(index)!
     hash = Math.imul(hash, 0x01000193) >>> 0
   }
   return hash.toString(16)
@@ -92,7 +92,11 @@ adminRoutes.get("/mcps/:mcp", async c => {
   const csrf = ensureCsrfToken(c)
   const added = c.req.query("added")
   const error = c.req.query("error")
-  const notice = error ? errorSentence(error) : added ? `Account “${added}” is ready.` : undefined
+  let notice: string | undefined
+  if (error) notice = errorSentence(error)
+  else if (added) notice = `Account “${added}” is ready.`
+  let noticeKind: "error" | "ok" | undefined
+  if (notice !== undefined) noticeKind = error ? "error" : "ok"
 
   return c.html(
     <McpPage
@@ -101,7 +105,7 @@ adminRoutes.get("/mcps/:mcp", async c => {
       csrf={csrf}
       devBypass={isDevBypass(c.env, c.req.url)}
       notice={notice}
-      noticeKind={notice === undefined ? undefined : error ? "error" : "ok"}
+      noticeKind={noticeKind}
     />
   )
 })
@@ -164,7 +168,7 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/default", async c => {
 
   const repository = new AccountRepository(c.env)
   const account = await repository.findBySlug(mcp, slug)
-  if (!account || account.state !== "active") return c.text("Not found", 404)
+  if (account?.state !== "active") return c.text("Not found", 404)
 
   await repository.setDefault(mcp, account.id)
   await repository.bumpCacheEpoch(account.id)

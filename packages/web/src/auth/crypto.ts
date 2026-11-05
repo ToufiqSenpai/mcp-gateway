@@ -55,15 +55,27 @@ export class TokenCipher {
     return bytes
   }
 
-  public async encrypt(plaintext: string, accountId: string, field: TokenField): Promise<string> {
-    const iv = randomBytes(IV_BYTES)
-    const cipher = createCipheriv(ALGORITHM, this.key(), iv)
-    cipher.setAAD(aad(accountId, field))
-    const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final(), cipher.getAuthTag()])
-    return `v2.${toBase64Url(iv)}.${toBase64Url(body)}`
+  public encrypt(plaintext: string, accountId: string, field: TokenField): Promise<string> {
+    try {
+      const iv = randomBytes(IV_BYTES)
+      const cipher = createCipheriv(ALGORITHM, this.key(), iv)
+      cipher.setAAD(aad(accountId, field))
+      const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final(), cipher.getAuthTag()])
+      return Promise.resolve(`v2.${toBase64Url(iv)}.${toBase64Url(body)}`)
+    } catch (error) {
+      return Promise.reject(error)
+    }
   }
 
-  public async decrypt(envelope: string, accountId: string, field: TokenField): Promise<string> {
+  public decrypt(envelope: string, accountId: string, field: TokenField): Promise<string> {
+    try {
+      return Promise.resolve(this.decryptSync(envelope, accountId, field))
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
+  private decryptSync(envelope: string, accountId: string, field: TokenField): string {
     const match = ENVELOPE.exec(envelope)
     if (!match?.[1] || !match[2]) throw new CredentialDecryptError()
     const iv = fromBase64Url(match[1])

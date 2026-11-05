@@ -29,6 +29,9 @@ function providerErrorCode(error: Error | undefined): string {
   return "refresh_failed"
 }
 
+type LockClaim = { claimed: true } | { claimed: false; advanced?: string }
+type RefreshAttempt = { tokens: OAuthTokens } | { token: string }
+
 /**
  * Single-flight refresh: one write lease on the Account row, CAS on the lease token, and a
  * 30 s expiry so a Worker dying mid-refresh cannot freeze the Account (§10).
@@ -55,17 +58,10 @@ export class RefreshService {
   }
 
   public async refresh(account: Account): Promise<string> {
-    const deadline = Date.now() + LOCK_WAIT_MS
     const lockToken = crypto.randomUUID()
-    let claimed = await this.repository.claimRefreshLock(account.id, lockToken, LOCK_LEASE_SECONDS)
-
-    if (!claimed) {
-      const advanced = await this.waitForOtherWriter(account, deadline)
-      if (advanced) return advanced
-      claimed = await this.repository.claimRefreshLock(account.id, lockToken, LOCK_LEASE_SECONDS)
-    }
-
-    if (!claimed) {
+    const claim = await this.claim(account, lockToken)
+    if (!claim.claimed) {
+      if (claim.advanced) return claim.advanced
       // Still contended at the deadline: use the current token while it is valid, else retry.
       if (account.accessTokenExpiresAt > nowSeconds()) return this.currentAccessToken(account)
       throw new Error(`Account "${account.slug}" is being refreshed; retry shortly.`)
@@ -77,26 +73,9 @@ export class RefreshService {
       throw new UnusableAccountError(account.mcp, account.slug, "no_credentials")
     }
 
-    let tokens: OAuthTokens
-    try {
-      const refreshToken = await this.cipher.decrypt(fresh.refreshToken, fresh.id, "refresh_token")
-      tokens = await OAuthProvider.for(this.env, fresh.provider).refreshTokens({
-        refreshToken,
-        scopes: requiredScopes(fresh.mcp)
-      })
-    } catch (thrown) {
-      // A throw that is not an Error carries no provider signal; treat it as an unnamed failure.
-      const error = thrown instanceof Error ? thrown : undefined
-      await this.repository.releaseRefreshLock(account.id, lockToken)
-      if (isPermanentRefreshFailure(error)) {
-        const code = error instanceof OAuthTokenError ? error.code : "invalid_grant"
-        await demoteAccount(this.repository, account, "needs_reauth", code)
-      }
-      await this.repository.update(account.id, { lastError: providerErrorCode(error) })
-      // A pre-emptive failure with a still-valid token proceeds with the old token.
-      if (account.accessTokenExpiresAt > nowSeconds()) return this.currentAccessToken(account)
-      throw new Error(`Account "${account.slug}" could not be refreshed; retry shortly.`)
-    }
+    const attempt = await this.exchange(account, fresh, fresh.refreshToken, lockToken)
+    if ("token" in attempt) return attempt.token
+    const tokens = attempt.tokens
 
     const required = requiredScopes(fresh.mcp)
     // An absent scope field means unchanged, never empty (Microsoft may omit it).
@@ -124,6 +103,45 @@ export class RefreshService {
     }
 
     return tokens.accessToken
+  }
+
+  /** Claims the write lease, waiting once for a writer that may already have rotated the token. */
+  private async claim(account: Account, lockToken: string): Promise<LockClaim> {
+    const deadline = Date.now() + LOCK_WAIT_MS
+    if (await this.repository.claimRefreshLock(account.id, lockToken, LOCK_LEASE_SECONDS)) return { claimed: true }
+
+    const advanced = await this.waitForOtherWriter(account, deadline)
+    if (advanced) return { claimed: false, advanced }
+    const claimed = await this.repository.claimRefreshLock(account.id, lockToken, LOCK_LEASE_SECONDS)
+    return claimed ? { claimed: true } : { claimed: false }
+  }
+
+  /** Exchanges the refresh token; a pre-emptive failure with a still-valid token falls back to it. */
+  private async exchange(
+    account: Account,
+    fresh: Account,
+    encryptedRefreshToken: string,
+    lockToken: string
+  ): Promise<RefreshAttempt> {
+    try {
+      const refreshToken = await this.cipher.decrypt(encryptedRefreshToken, fresh.id, "refresh_token")
+      const tokens = await OAuthProvider.for(this.env, fresh.provider).refreshTokens({
+        refreshToken,
+        scopes: requiredScopes(fresh.mcp)
+      })
+      return { tokens }
+    } catch (error_) {
+      // A throw that is not an Error carries no provider signal; treat it as an unnamed failure.
+      const error = error_ instanceof Error ? error_ : undefined
+      await this.repository.releaseRefreshLock(account.id, lockToken)
+      if (isPermanentRefreshFailure(error)) {
+        const code = error instanceof OAuthTokenError ? error.code : "invalid_grant"
+        await demoteAccount(this.repository, account, "needs_reauth", code)
+      }
+      await this.repository.update(account.id, { lastError: providerErrorCode(error) })
+      if (account.accessTokenExpiresAt > nowSeconds()) return { token: await this.currentAccessToken(account) }
+      throw new Error(`Account "${account.slug}" could not be refreshed; retry shortly.`)
+    }
   }
 
   private async currentAccessToken(account: Account): Promise<string> {

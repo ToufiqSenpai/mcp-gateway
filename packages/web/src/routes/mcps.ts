@@ -36,7 +36,7 @@ mcpRoutes.post("/:slug", async c => {
     () => factory(createMcpContext(c.env, slug, promise => c.executionCtx.waitUntil(promise))),
     { legacy: "reject", responseMode: "json" }
   )
-  return handler.fetch(c.req.raw, { parsedBody: c.get("parsedBody") })
+  return await handler.fetch(c.req.raw, { parsedBody: c.get("parsedBody") })
 })
 
 mcpRoutes.on(["GET", "DELETE", "PUT", "PATCH", "HEAD"], "/:slug", c =>

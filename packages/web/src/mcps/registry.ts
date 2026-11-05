@@ -25,5 +25,6 @@ export const MCP_REGISTRY = {
 } satisfies Record<McpSlug, McpDefinition>
 
 export function isMcpSlug(value: string): value is McpSlug {
-  return MCP_SLUGS.some(slug => slug === value)
+  // SAFETY: an arbitrary path segment is only narrowed after the runtime membership check.
+  return (MCP_SLUGS as readonly string[]).includes(value)
 }

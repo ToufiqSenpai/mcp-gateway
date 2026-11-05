@@ -84,7 +84,7 @@ export function McpPage({ mcp, accounts, csrf, devBypass, notice, noticeKind }: 
             </thead>
             <tbody>
               {accounts.map(account => (
-                <tr class="border-b border-slate-200 align-top">
+                <tr key={account.slug} class="border-b border-slate-200 align-top">
                   <td class="py-2 font-mono">{account.slug}</td>
                   <td class="py-2">{account.email}</td>
                   <td class="py-2">{account.displayName ?? "—"}</td>

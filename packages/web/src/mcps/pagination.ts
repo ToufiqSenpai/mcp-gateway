@@ -38,7 +38,7 @@ export class HmacCursorCodec implements CursorCodec {
   public async accountSet(accounts: { slug: string }[]): Promise<string> {
     const slugs = accounts
       .map(account => account.slug)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
       .join("\n")
     const digest = await crypto.subtle.digest("SHA-256", encoder.encode(slugs))
     let hex = ""

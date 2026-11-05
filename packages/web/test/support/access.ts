@@ -8,7 +8,11 @@ export const TEST_ORIGIN = "https://gateway.example.com"
  * `Host` header a real deployment sees has to be supplied explicitly.
  */
 export const appFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
+  let target: string | URL
+  if (input instanceof URL) target = input
+  else if (input instanceof Request) target = input.url
+  else target = input
+  const url = new URL(target)
   const headers = new Headers(init?.headers)
   if (!headers.has("Host")) headers.set("Host", url.host)
   return SELF.fetch(input, { ...init, headers })

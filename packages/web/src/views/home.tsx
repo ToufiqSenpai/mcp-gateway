@@ -35,6 +35,7 @@ export function HomePage({ rows, devBypass }: { rows: McpRow[]; devBypass: boole
           const icon = productIcon(row.slug)
           return (
             <a
+              key={row.slug}
               href={`/admin/mcps/${row.slug}`}
               class="group block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
             >

@@ -6,7 +6,7 @@ import { covers, parseScopes, requiredScopes } from "../auth/scopes"
 import { AccountRepository } from "../db/account-repository"
 import { nowSeconds } from "../db/client"
 import { OAuthStateRepository } from "../db/oauth-state-repository"
-import type { Account, McpSlug, Provider } from "../db/schema"
+import type { Account, McpSlug, OAuthAttempt as OAuthAttemptRow, Provider } from "../db/schema"
 import type { Env } from "../env"
 
 /** The slug a user types on the MCP's admin page (SPEC §8.1), unique per MCP. */
@@ -68,6 +68,12 @@ export interface CallbackOutcome {
   error?: "denied" | "duplicate" | "no_refresh_token" | "state" | "identity_mismatch" | "slug_taken" | "missing_scope"
   duplicateSlug?: string
 }
+
+type ExchangedTokens =
+  | { ok: true; tokens: OAuthTokens; scopes: string[]; refreshToken: string }
+  | { ok: false; outcome: CallbackOutcome }
+
+type Identified = { ok: true; identity: ProviderIdentity } | { ok: false; outcome: CallbackOutcome }
 
 /** The identity fields both Providers must supply before an Account is written. */
 interface ProviderIdentity {
@@ -167,8 +173,26 @@ export class OAuthFlowService {
     }
 
     const mcp = attempt.mcp
-    const required = requiredScopes(mcp)
+    const verified = await this.exchange(attempt, input)
+    if (!verified.ok) return verified.outcome
 
+    const identified = await this.identify(mcp, attempt.provider, verified.tokens.accessToken)
+    if (!identified.ok) return identified.outcome
+
+    const duplicate = await this.accounts.findByIdentity(mcp, attempt.provider, identified.identity.subject)
+    if (duplicate && duplicate.id !== attempt.targetAccountId) {
+      return { mcp, error: "duplicate", duplicateSlug: duplicate.slug }
+    }
+
+    const { tokens, scopes, refreshToken } = verified
+    if (attempt.targetAccountId) {
+      return this.finishReauth(mcp, attempt.targetAccountId, identified.identity, tokens, scopes, refreshToken)
+    }
+    return this.finishNew(attempt, identified.identity, tokens, scopes, refreshToken)
+  }
+
+  private async exchange(attempt: OAuthAttemptRow, input: CallbackInput): Promise<ExchangedTokens> {
+    const mcp = attempt.mcp
     let tokens: OAuthTokens
     try {
       tokens = await OAuthProvider.for(this.env, attempt.provider).exchangeCode({
@@ -177,44 +201,58 @@ export class OAuthFlowService {
         redirectUri: callbackUri(input.requestUrl, input.provider)
       })
     } catch {
-      return { mcp, error: "denied" }
+      return { ok: false, outcome: { mcp, error: "denied" } }
     }
 
     const refreshToken = tokens.refreshToken
-    if (refreshToken === undefined) return { mcp, error: "no_refresh_token" }
+    if (refreshToken === undefined) return { ok: false, outcome: { mcp, error: "no_refresh_token" } }
 
     const scopes = tokens.scopes ?? []
-    if (!covers(scopes, required)) return { mcp, error: "missing_scope" }
+    if (!covers(scopes, requiredScopes(mcp))) return { ok: false, outcome: { mcp, error: "missing_scope" } }
 
-    let identity: ProviderIdentity
+    return { ok: true, tokens, scopes, refreshToken }
+  }
+
+  private async identify(mcp: McpSlug, provider: Provider, accessToken: string): Promise<Identified> {
     try {
-      identity = await fetchIdentity(attempt.provider, tokens.accessToken)
+      return { ok: true, identity: await fetchIdentity(provider, accessToken) }
     } catch {
+      return { ok: false, outcome: { mcp, error: "denied" } }
+    }
+  }
+
+  private async finishReauth(
+    mcp: McpSlug,
+    targetAccountId: string,
+    identity: ProviderIdentity,
+    tokens: OAuthTokens,
+    scopes: string[],
+    refreshToken: string
+  ): Promise<CallbackOutcome> {
+    const target = await this.accounts.findById(targetAccountId)
+    if (!target) return { mcp, error: "state" }
+    // A reauth must never narrow a working Credential.
+    if (!covers(scopes, requiredScopes(mcp)) || !covers(parseScopes(target.scopes), scopes)) {
+      return { mcp, error: "missing_scope" }
+    }
+    try {
+      await this.applyReauth(target, identity, tokens, scopes, refreshToken)
+    } catch (error) {
+      if (error instanceof IdentityMismatchError) return { mcp, error: "identity_mismatch" }
+      if (error instanceof RetryableContentionError) return { mcp, error: "state" }
       return { mcp, error: "denied" }
     }
+    return { mcp, addedSlug: target.slug }
+  }
 
-    const duplicate = await this.accounts.findByIdentity(mcp, attempt.provider, identity.subject)
-    if (duplicate && duplicate.id !== attempt.targetAccountId) {
-      return { mcp, error: "duplicate", duplicateSlug: duplicate.slug }
-    }
-
-    if (attempt.targetAccountId) {
-      const target = await this.accounts.findById(attempt.targetAccountId)
-      if (!target) return { mcp, error: "state" }
-      // A reauth must never narrow a working Credential.
-      if (!covers(scopes, required) || !covers(parseScopes(target.scopes), scopes)) {
-        return { mcp, error: "missing_scope" }
-      }
-      try {
-        await this.applyReauth(target, identity, tokens, scopes, refreshToken)
-      } catch (error) {
-        if (error instanceof IdentityMismatchError) return { mcp, error: "identity_mismatch" }
-        if (error instanceof RetryableContentionError) return { mcp, error: "state" }
-        return { mcp, error: "denied" }
-      }
-      return { mcp, addedSlug: target.slug }
-    }
-
+  private async finishNew(
+    attempt: OAuthAttemptRow,
+    identity: ProviderIdentity,
+    tokens: OAuthTokens,
+    scopes: string[],
+    refreshToken: string
+  ): Promise<CallbackOutcome> {
+    const mcp = attempt.mcp
     const slugTaken = await this.accounts.findBySlug(mcp, attempt.slug)
     if (slugTaken) return { mcp, error: "slug_taken" }
 
@@ -229,9 +267,7 @@ export class OAuthFlowService {
         refreshToken
       })
     } catch (error) {
-      if (error instanceof Error && /UNIQUE/i.test(error.message)) {
-        return { mcp, error: "duplicate" }
-      }
+      if (error instanceof Error && /UNIQUE/i.test(error.message)) return { mcp, error: "duplicate" }
       return { mcp, error: "denied" }
     }
 

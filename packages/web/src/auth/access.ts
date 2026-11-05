@@ -24,7 +24,9 @@ function isLocalHost(hostname: string): boolean {
 }
 
 function teamDomain(env: Env): string {
-  return env.CF_ACCESS_TEAM_DOMAIN.replace(/\/+$/, "")
+  let domain = env.CF_ACCESS_TEAM_DOMAIN
+  while (domain.endsWith("/")) domain = domain.slice(0, -1)
+  return domain
 }
 
 /** The only claims this verifier reads; every other claim is ignored. */
