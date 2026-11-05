@@ -12,5 +12,3 @@ export const REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/calendar"
 ] as const
-
-export const REQUIRED_SCOPE_STRING = REQUIRED_SCOPES.join(" ")

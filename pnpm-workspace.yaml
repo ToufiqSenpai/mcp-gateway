@@ -8,39 +8,6 @@ allowBuilds:
 
 # The vitest pool bundles an older Miniflare whose workerd predates compatibility_date
 # 2026-11-01. One workerd for the whole workspace keeps tests on the deploy runtime.
-minimumReleaseAgeExclude:
-  - '@cloudflare/workers-types@5.20261104.1'
-  - '@microsoft/kiota-abstractions@1.0.0-preview.112'
-  - '@microsoft/kiota-bundle@1.0.0-preview.112'
-  - '@microsoft/kiota-http-fetchlibrary@1.0.0-preview.112'
-  - '@microsoft/kiota-serialization-form@1.0.0-preview.112'
-  - '@microsoft/kiota-serialization-json@1.0.0-preview.112'
-  - '@microsoft/kiota-serialization-multipart@1.0.0-preview.112'
-  - '@microsoft/kiota-serialization-text@1.0.0-preview.112'
-  - '@oxlint/binding-android-arm-eabi@1.91.0'
-  - '@oxlint/binding-android-arm64@1.91.0'
-  - '@oxlint/binding-darwin-arm64@1.91.0'
-  - '@oxlint/binding-darwin-x64@1.91.0'
-  - '@oxlint/binding-freebsd-x64@1.91.0'
-  - '@oxlint/binding-linux-arm-gnueabihf@1.91.0'
-  - '@oxlint/binding-linux-arm-musleabihf@1.91.0'
-  - '@oxlint/binding-linux-arm64-gnu@1.91.0'
-  - '@oxlint/binding-linux-arm64-musl@1.91.0'
-  - '@oxlint/binding-linux-ppc64-gnu@1.91.0'
-  - '@oxlint/binding-linux-riscv64-gnu@1.91.0'
-  - '@oxlint/binding-linux-riscv64-musl@1.91.0'
-  - '@oxlint/binding-linux-s390x-gnu@1.91.0'
-  - '@oxlint/binding-linux-x64-gnu@1.91.0'
-  - '@oxlint/binding-linux-x64-musl@1.91.0'
-  - '@oxlint/binding-openharmony-arm64@1.91.0'
-  - '@oxlint/binding-win32-arm64-msvc@1.91.0'
-  - '@oxlint/binding-win32-ia32-msvc@1.91.0'
-  - '@oxlint/binding-win32-x64-msvc@1.91.0'
-  - miniflare@5.20261103.0-beta
-  - oxlint@1.91.0
-  - wrangler@4.157.0
-  - '@oxlint/plugins@1.91.0'
-
 overrides:
   workerd: 1.20261103.1
   # One kiota preview number per install: mixing them breaks `registerDefaultDeserializer`

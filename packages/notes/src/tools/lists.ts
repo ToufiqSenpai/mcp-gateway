@@ -29,18 +29,6 @@ const cursorSchema = z
   .optional()
   .describe("Opaque cursor from a previous response. Empty string means the first page.")
 
-export const listAccountsTool = defineTool(
-  "list_accounts",
-  {
-    title: "List accounts",
-    description:
-      "Lists the Accounts available to this MCP as { slug, isDefault }. Never returns state, Credentials or provider subjects.",
-    inputSchema: z.object({}),
-    annotations: { readOnlyHint: true, idempotentHint: true }
-  },
-  async (_args, context) => ({ accounts: await context.listAccounts() })
-)
-
 export const listNotebooksTool = defineTool(
   "list_notebooks",
   {

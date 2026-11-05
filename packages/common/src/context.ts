@@ -17,7 +17,10 @@ export interface McpContext {
   enumeration<T>(
     account: string,
     load: () => Promise<{ items: T[]; truncated: boolean }>
-  ): Promise<{ items: T[]; truncated: boolean; cached: boolean }>
+  ): Promise<{
+    items: T[]
+    truncated: boolean
+  }>
 }
 
 export interface CursorPayload {

@@ -58,7 +58,7 @@ export class CalendarResourceRegistry {
   public async list(): Promise<ResourceListing> {
     const accounts = await this.context.listAccounts()
     const listing = await collectAcrossAccounts<ResourceItem>(accounts, async slug => {
-      const cached = await this.context.enumeration<ResourceItem>(slug, async () => {
+      const result = await this.context.enumeration<ResourceItem>(slug, async () => {
         const client = this.context.calendar(slug)
         return collectPages(async pageToken => {
           const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }
@@ -80,7 +80,7 @@ export class CalendarResourceRegistry {
           }
         })
       })
-      return { items: cached.items, truncated: cached.truncated }
+      return { items: result.items, truncated: result.truncated }
     })
     return { resources: listing.items, skipped: listing.skipped, truncated: listing.truncated }
   }
@@ -134,16 +134,7 @@ export class CalendarResourceRegistry {
   }
 
   public register(server: McpServer): void {
-    const template = new ResourceTemplate("calendar://{account}/calendars/{calendarId}", {
-      list: async () => {
-        const listing = await this.list()
-        const result = { resources: listing.resources }
-        if (listing.skipped.length > 0) {
-          Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })
-        }
-        return result
-      }
-    })
+    const template = new ResourceTemplate("calendar://{account}/calendars/{calendarId}", { list: undefined })
 
     server.registerResource("calendar", template, { title: "Calendar", mimeType: "application/json" }, async uri =>
       this.read(uri.href)

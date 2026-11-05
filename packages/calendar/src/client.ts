@@ -6,12 +6,6 @@ export const GOOGLE_ROOT_URL = "https://www.googleapis.com/"
 /** Query values the Provider endpoints accept; objects never reach the URL builder. */
 export type QueryValue = string | number | boolean | string[] | undefined
 
-/** The subset of an error that carries a Provider status, without trusting its body. */
-export interface ProviderFailure {
-  readonly code?: string | number
-  readonly response?: { readonly status?: number }
-}
-
 interface RequestOptions {
   method?: string
   query?: Record<string, QueryValue>
@@ -207,11 +201,5 @@ export function googleCalendar(ctx: McpContext, slug: string, rootUrl: string = 
 
 /** Reads the Provider error status without ever returning a raw body. */
 export function providerErrorCode(error: Error): string | undefined {
-  if (error instanceof GoogleApiError) return String(error.status)
-  // SAFETY: Provider SDK errors carry code/response.status; absent members read as undefined.
-  const failure = error as ProviderFailure
-  if (failure.code !== undefined) return String(failure.code)
-  const status = failure.response?.status
-  if (status !== undefined) return String(status)
-  return undefined
+  return error instanceof GoogleApiError ? String(error.status) : undefined
 }

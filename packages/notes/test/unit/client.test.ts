@@ -39,7 +39,7 @@ function stubContext(refreshed = "refreshed-token") {
     },
     async invalidateEnumeration() {},
     async enumeration<T>(_account: string, load: () => Promise<{ items: T[]; truncated: boolean }>) {
-      return { ...(await load()), cached: false }
+      return load()
     }
   }
   return { ctx, state }

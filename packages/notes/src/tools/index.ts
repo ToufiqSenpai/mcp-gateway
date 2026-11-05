@@ -1,8 +1,8 @@
-import type { ToolDefinition } from "@mcp-gateway/common"
+import { listAccountsTool, type ToolDefinition } from "@mcp-gateway/common"
 
 import { createPageTool } from "./create-page"
 import { getPageTool } from "./get-page"
-import { listAccountsTool, listNotebooksTool, listPagesTool, listSectionsTool } from "./lists"
+import { listNotebooksTool, listPagesTool, listSectionsTool } from "./lists"
 import { searchPagesTool } from "./search-pages"
 import type { ToolContext } from "./tool-context"
 import { updatePageTool } from "./update-page"

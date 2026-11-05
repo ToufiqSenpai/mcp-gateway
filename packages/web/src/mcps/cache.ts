@@ -6,7 +6,6 @@ const TTL_SECONDS = 300
 
 interface CacheValue<T> {
   resources: T[]
-  fetchedAt: number
   truncated: boolean
 }
 
@@ -26,7 +25,7 @@ export class EnumerationCache {
   public readonly get = async <T>(
     slug: string,
     load: () => Promise<{ items: T[]; truncated: boolean }>
-  ): Promise<{ items: T[]; truncated: boolean; cached: boolean }> => {
+  ): Promise<{ items: T[]; truncated: boolean }> => {
     // The epoch is read from D1 on every enumeration, so a bump is visible immediately.
     const account = await this.repository.findBySlug(this.mcp, slug)
     const epoch = account?.cacheEpoch ?? 0
@@ -34,7 +33,7 @@ export class EnumerationCache {
 
     const cached = await this.env.CACHE.get<CacheValue<T>>(key, "json")
     if (cached) {
-      return { items: cached.resources, truncated: cached.truncated, cached: true }
+      return { items: cached.resources, truncated: cached.truncated }
     }
 
     const fresh = await load()
@@ -43,7 +42,6 @@ export class EnumerationCache {
         key,
         JSON.stringify({
           resources: fresh.items,
-          fetchedAt: Date.now(),
           truncated: false
         } satisfies CacheValue<T>),
         { expirationTtl: TTL_SECONDS }
@@ -54,6 +52,6 @@ export class EnumerationCache {
       else await put
     }
 
-    return { items: fresh.items, truncated: fresh.truncated, cached: false }
+    return { items: fresh.items, truncated: fresh.truncated }
   }
 }

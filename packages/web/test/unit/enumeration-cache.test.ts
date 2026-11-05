@@ -16,6 +16,5 @@ describe("enumeration cache", () => {
 
     expect(result.items).toEqual([{ id: "one" }])
     expect(result.truncated).toBe(false)
-    expect(result.cached).toBe(false)
   })
 })

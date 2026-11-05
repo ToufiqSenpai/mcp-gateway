@@ -4,8 +4,8 @@ import type { EnumerationCache } from "../mcps/cache"
 import type { AccountService } from "./lifecycle"
 
 /**
- * The Worker's implementation of the package boundary. It adds no members: the mirrored
- * interface in every MCP package stays structurally identical (asserted by a contract test).
+ * The Worker's implementation of the package boundary. It adds no members; `common` owns the
+ * interface, so the compiler checks the contract.
  */
 export class GatewayMcpContext implements McpContext {
   public readonly cursors: CursorCodec

@@ -39,7 +39,7 @@ export class NotebookResourceRegistry {
   public async list(): Promise<ResourceListing> {
     const accounts = await this.context.listAccounts()
     const listing = await collectAcrossAccounts<ResourceItem>(accounts, async slug => {
-      const cached = await this.context.enumeration<ResourceItem>(slug, async () => {
+      const enumeration = await this.context.enumeration<ResourceItem>(slug, async () => {
         const result = await this.context.graph(slug).notebooks()
         return {
           items: result.items.flatMap(notebook =>
@@ -56,7 +56,7 @@ export class NotebookResourceRegistry {
           truncated: result.truncated
         }
       })
-      return { items: cached.items, truncated: cached.truncated }
+      return { items: enumeration.items, truncated: enumeration.truncated }
     })
     return { resources: listing.items, skipped: listing.skipped, truncated: listing.truncated }
   }
@@ -101,16 +101,7 @@ export class NotebookResourceRegistry {
   }
 
   public register(server: McpServer): void {
-    const template = new ResourceTemplate("notes://{account}/notebooks/{notebookId}", {
-      list: async () => {
-        const listing = await this.list()
-        const result = { resources: listing.resources }
-        if (listing.skipped.length > 0) {
-          Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })
-        }
-        return result
-      }
-    })
+    const template = new ResourceTemplate("notes://{account}/notebooks/{notebookId}", { list: undefined })
 
     server.registerResource("notebook", template, { title: "Notebook", mimeType: "application/json" }, async uri =>
       this.read(uri.href)

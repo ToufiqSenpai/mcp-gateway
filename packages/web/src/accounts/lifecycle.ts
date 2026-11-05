@@ -7,12 +7,10 @@ import type { Account, McpSlug } from "../db/schema"
 import type { Env } from "../env"
 import { EnumerationCache } from "../mcps/cache"
 import { HmacCursorCodec } from "../mcps/pagination"
-import { UnusableAccountError, type UnusableReason } from "./errors"
+import { UnusableAccountError } from "./errors"
 import { GatewayMcpContext } from "./gateway-context"
 import { RefreshService } from "./refresh"
-import { demoteAccount, readAccessToken } from "./unusable"
-
-export { UnusableAccountError, type UnusableReason }
+import { demoteAccount } from "./unusable"
 
 /** Account selection and Credential use for one MCP, over one D1 handle. */
 export class AccountService {
@@ -69,10 +67,6 @@ export class AccountService {
     await Promise.all(rows.map(row => this.repository.bumpCacheEpoch(row.id)))
   }
 
-  public async decryptAccessToken(account: Account): Promise<string> {
-    return readAccessToken(this.cipher, account)
-  }
-
   private async assertUsable(account: Account): Promise<void> {
     if (account.state === "revoked") {
       throw new UnusableAccountError(account.mcp, account.slug, "revoked")
@@ -90,7 +84,7 @@ export class AccountService {
   }
 
   /**
-   * Demotes on lost scope coverage �? the only detector for a Required set widened after a
+   * Demotes on lost scope coverage — the only detector for a Required set widened after a
    * deploy, where both stored and Provider scopes are unchanged.
    */
   private async demoteForScope(account: Account): Promise<never> {

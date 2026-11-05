@@ -5,8 +5,8 @@
   `packages/common` split), not at a commit.
 - **Assumed load:** one operator, a handful of Accounts, a few MCP clients. Findings are
   judged against that, not against a multi-tenant service.
-- **Status:** findings 1 and 2 are fixed. This file tracks the rest; IDs match the audit
-  report and are not renumbered.
+- **Status:** findings 1, 2, 3, 15 and 16 are fixed. This file tracks the rest; IDs match the
+  audit report and are not renumbered.
 
 ## Fixed during this audit
 
@@ -23,23 +23,10 @@
 
 ### 3. Dead code that can be deleted
 
-**Where:** `packages/web/src/accounts/lifecycle.ts:L16,L73-75`;
-`packages/calendar/src/index.ts:L10`; `packages/notes/src/index.ts:L10`;
-`packages/calendar/src/client.ts:L10-13,L204-206,L209-216`;
-`packages/common/src/context.ts:L20`; `packages/web/src/mcps/cache.ts:L9,L46`;
-`packages/calendar/src/resources.ts:L137-146`; `packages/notes/src/resources.ts:L104-113`.
-
-**Problem:** Nothing calls these: `AccountService.decryptAccessToken`, the
-`UnusableAccountError`/`UnusableReason` re-export, `REQUIRED_SCOPE_STRING` (both packages),
-`ProviderFailure` and its fallback in `providerErrorCode` (only `GoogleApiError` is ever
-thrown there), the `googleCalendar()` wrapper, the `cached` result flag, `fetchedAt` in the
-KV value, and the `list:` callback on both `ResourceTemplate`s — `McpServerBuilder` replaces the
-SDK's `resources/list` handler, so those callbacks never run.
-
-**Fix:** Delete them. `new ResourceTemplate(uri)` without options is enough.
-
-**If skipped:** Readers chase code that cannot run, and the next change to the skipped-Account
-warning gets made in the dead copy.
+**Fixed.** Removed `AccountService.decryptAccessToken`, the `UnusableAccountError` re-export,
+`REQUIRED_SCOPE_STRING`, the `ProviderFailure` fallback in `providerErrorCode`, the `cached`
+flag, `fetchedAt` in the KV value, and both dead `list:` callbacks on the `ResourceTemplate`s.
+(`googleCalendar()` is kept: `ToolContext` calls it.)
 
 ### 4. The calendar tool logic has no tests
 
@@ -197,23 +184,13 @@ nothing fails.
 
 ### 15. `list_accounts` is written twice, byte for byte
 
-**Where:** `packages/calendar/src/tools/list-accounts.ts:L7`,
-`packages/notes/src/tools/lists.ts:L32-42`.
-
-**Problem:** Same title, description, schema and handler. Changing the wording or shape
-means two edits and two contract tests.
-
-**Fix:** Export one tool factory from `@mcp-gateway/common` and spread it into both arrays.
+**Fixed.** One `listAccountsTool` lives in `@mcp-gateway/common` and both packages spread it
+into their arrays.
 
 ### 16. SPEC describes files that no longer exist
 
-**Where:** `docs/SPEC.md:L7,L167,L182,L187`.
-
-**Problem:** The status line still says "nothing implemented"; the layout lists
-`mcps/context.ts` (deleted, moved to `packages/common`) and `tools/registry.ts` inside each
-package (it is in `common`).
-
-**Fix:** Update those four lines.
+**Fixed.** The status line, the layout (`mcps/context.ts`, `tools/registry.ts`, `arctic.ts`)
+and the OAuth section now match the code.
 
 ### 17. `gaxios` is a direct dependency nothing imports
 
@@ -230,4 +207,4 @@ Real Google and Graph APIs (all Provider I/O is stubbed); `specs/`, `docs/adr/`,
 2,000-line custom oxlint plugin, `test/support/providers.ts` in full, and `pnpm-lock.yaml`.
 A few smaller nits are omitted.
 
-**Lean:** about -90 lines and -1 dependency possible from findings 3, 10, 11, 12 and 15–17.
+**Lean:** about -40 lines and -1 dependency possible from findings 10–12 and 17.

@@ -1,9 +1,8 @@
-import type { ToolDefinition } from "@mcp-gateway/common"
+import { listAccountsTool, type ToolDefinition } from "@mcp-gateway/common"
 
 import { createEventTool } from "./create-event"
 import { deleteEventTool } from "./delete-event"
 import { getEventTool } from "./get-event"
-import { listAccountsTool } from "./list-accounts"
 import { listCalendarsTool } from "./list-calendars"
 import { listEventsTool } from "./list-events"
 import { respondToEventTool } from "./respond-to-event"

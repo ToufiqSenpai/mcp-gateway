@@ -59,8 +59,7 @@ export const stubContext: McpContext = {
   },
   async invalidateEnumeration() {},
   async enumeration<T>(_account: string, load: () => Promise<{ items: T[]; truncated: boolean }>) {
-    const fresh = await load()
-    return { ...fresh, cached: false }
+    return load()
   }
 }
 

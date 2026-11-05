@@ -4,8 +4,9 @@ A single-user gateway on Cloudflare Workers that hosts first-party MCP servers u
 `/mcps/*`, each against exactly one Provider, with several Accounts per MCP, an admin UI,
 and MCP resources and prompts.
 
-**Status:** design complete, nothing implemented. The decisions that are hard to reverse are
-recorded in [`docs/adr/`](./docs/adr/).
+**Status:** implemented. The remaining audit findings are tracked in
+[`docs/AUDIT.md`](./AUDIT.md). The decisions that are hard to reverse are recorded in
+[`docs/adr/`](./docs/adr/).
 
 ---
 
@@ -66,7 +67,7 @@ interface McpContext {
   enumeration<T>(
     account: string,
     load: () => Promise<{ items: T[]; truncated: boolean }>,
-  ): Promise<{ items: T[]; truncated: boolean; cached: boolean }>;
+  ): Promise<{ items: T[]; truncated: boolean }>;
 }
 ```
 
@@ -162,9 +163,9 @@ packages/
       index.ts                 # Worker entry: Hono app
       routes/{mcps,oauth}.ts
       routes/admin.tsx         # server-rendered routes need JSX
-      mcps/registry.ts         # slug -> factory, the only MCP list + McpRegistry facade
-      mcps/{context,pagination,cache,in-process}.ts
-                               # interface + HmacCursorCodec, EnumerationCache, InProcessRunner
+      mcps/registry.ts         # slug -> factory, the only MCP list
+      mcps/{pagination,cache,in-process}.ts
+                               # HmacCursorCodec, EnumerationCache, InProcessRunner
       db/{schema.ts,client.ts,account-repository.ts,oauth-state-repository.ts}
       auth/{access.ts,crypto.ts,oauth.ts,scopes.ts}
                                # AccessVerifier, TokenCipher, OAuthProvider, scope sets + coverage
@@ -178,12 +179,12 @@ packages/
     src/{index.ts,server.ts,client.ts,tools/,resources.ts,prompts.ts}
       server.ts                # CalendarServer
       client.ts                # GoogleCalendarClient + resource classes
-      tools/{index,helpers,tool-context,registry}.ts
+      tools/{index,helpers,tool-context}.ts
   notes/
     package.json  tsconfig.json  vitest.config.ts
     src/{index.ts,server.ts,client.ts,tools/,resources.ts}
       server.ts                # NotesServer
-      tools/{index,helpers,tool-context,registry}.ts
+      tools/{index,helpers,tool-context}.ts
 ```
 
 No Workers Static Assets. Tailwind is compiled to `packages/web/src/admin/app.generated.css`
@@ -897,7 +898,7 @@ replace; image proxy.
 ## 14. Enumeration cache
 
 KV caches container enumeration only — the `resources/list` payload — keyed
-`v1:enum:<mcp>:<account>:<epoch>`, value `{ resources, fetchedAt, truncated }`.
+`v1:enum:<mcp>:<account>:<epoch>`, value `{ resources, truncated }`.
 Fixed-length keys avoid KV's 512-byte key limit.
 
 `<epoch>` is `accounts.cache_epoch`, read from D1 on every enumeration, so a bump is

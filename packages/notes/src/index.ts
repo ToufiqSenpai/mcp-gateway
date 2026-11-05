@@ -6,5 +6,3 @@ export { NotesServer } from "./server"
  * callback check and the call-path check.
  */
 export const REQUIRED_SCOPES = ["offline_access", "User.Read", "Notes.ReadWrite"] as const
-
-export const REQUIRED_SCOPE_STRING = REQUIRED_SCOPES.join(" ")
