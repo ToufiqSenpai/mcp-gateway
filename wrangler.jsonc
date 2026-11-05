@@ -12,10 +12,10 @@
     {
       "binding": "DB",
       "database_name": "mcp-gateway",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "57eb1855-5080-4ffa-94ab-e9e97c74b903",
       "migrations_dir": "packages/web/migrations"
     }
   ],
-  "kv_namespaces": [{ "binding": "CACHE", "id": "00000000000000000000000000000000" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "5e9451cc24354ccf8eea428278f9736c" }],
   "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": false }]
 }
