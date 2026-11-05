@@ -39,20 +39,24 @@ export abstract class McpServerBuilder<C> {
     this.resources.register(server)
     this.registerPrompts?.(server)
 
-    // The SDK's own resources/list drops a partial listing's ttlMs/_meta, so serve it here.
-    server.server.removeRequestHandler("resources/list")
-    server.server.setRequestHandler("resources/list", async () => {
-      const listing = await this.resources.list()
-      const result = { resources: listing.resources }
-      if (listing.skipped.length > 0 || listing.truncated) {
-        Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })
-      }
-      return result
-    })
+    // A server that registered no resources must not advertise them: installing the handlers
+    // requires the capability, and an empty list is not the same as "not supported".
+    if (server.server.getCapabilities().resources) {
+      // The SDK's own resources/list drops a partial listing's ttlMs/_meta, so serve it here.
+      server.server.removeRequestHandler("resources/list")
+      server.server.setRequestHandler("resources/list", async () => {
+        const listing = await this.resources.list()
+        const result = { resources: listing.resources }
+        if (listing.skipped.length > 0 || listing.truncated) {
+          Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })
+        }
+        return result
+      })
 
-    // Containers are addressed by concrete URI, not a template: list nothing.
-    server.server.removeRequestHandler("resources/templates/list")
-    server.server.setRequestHandler("resources/templates/list", () => ({ resourceTemplates: [] }))
+      // Containers are addressed by concrete URI, not a template: list nothing.
+      server.server.removeRequestHandler("resources/templates/list")
+      server.server.setRequestHandler("resources/templates/list", () => ({ resourceTemplates: [] }))
+    }
 
     // Nothing here is subscribable: no listChanged, no resources/subscribe (ADR-0001).
     const capabilities = server.server.getCapabilities()
