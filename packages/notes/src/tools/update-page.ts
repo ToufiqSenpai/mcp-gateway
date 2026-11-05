@@ -1,18 +1,10 @@
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
+import { accountSchema, commandSchema, pageIdSchema, type PatchCommand } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
-const commandSchema = z.object({
-  target: z.string().min(1).describe("#<data-id>, body, or title"),
-  action: z.enum(["replace", "append", "prepend", "insert", "delete"]),
-  content: z.string().optional(),
-  position: z.enum(["after", "before"]).optional()
-})
-
-type Command = z.infer<typeof commandSchema>
-
-export function validateCommands(commands: Command[]): void {
+export function validateCommands(commands: PatchCommand[]): void {
   if (commands.length === 0) throw new Error("commands must contain at least one command.")
 
   for (const command of commands) {
@@ -30,11 +22,11 @@ export const updatePageTool = defineTool(
   {
     title: "Update page",
     description:
-      'Forwards Graph patchContentCommand objects unchanged. There is no whole-page replace: target body supports append only, and replace needs a generated element id (except target "title").',
+      'Updates the content of a page with Graph patchContentCommand objects. There is no whole-page replace: target body supports append only, and replace needs a generated element id (except target "title").',
     inputSchema: z.object({
-      account: z.string().optional(),
-      pageId: z.string(),
-      commands: z.array(commandSchema).min(1)
+      account: accountSchema,
+      pageId: pageIdSchema,
+      commands: z.array(commandSchema).min(1).describe("Required. The patch commands to apply to the page content.")
     }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },

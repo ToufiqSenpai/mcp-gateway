@@ -7,6 +7,7 @@ import {
   accountSchema,
   dateTimeSchema,
   eventTypeSchema,
+  googleEventType,
   orderBySchema,
   pageSizeSchema,
   pageTokenSchema
@@ -50,16 +51,46 @@ function matchesFullText(event: CalendarEvent, query: string): boolean {
 
 const inputSchema = z.object({
   account: accountSchema,
-  calendarId: z.string().optional(),
-  startTime: dateTimeSchema.optional(),
-  endTime: dateTimeSchema.optional(),
-  fullText: z.string().optional(),
-  eventType: z.array(eventTypeSchema).optional(),
+  calendarId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. ID of the calendar containing the events. Email address - can be resolved using list_calendars. Default: primary calendar."
+    ),
+  startTime: dateTimeSchema
+    .optional()
+    .describe(
+      "Optional. The lower bound of a time range. Must only be set when a specific timeframe is requested by the user. Must be an ISO 8601 timestamp less than endTime. Default: now."
+    ),
+  endTime: dateTimeSchema
+    .optional()
+    .describe(
+      "Optional. The upper bound of a time range. Must only be set when a specific timeframe or a time in the past is requested by the user. Must be an ISO 8601 timestamp greater than startTime. Default: 7 days after startTime."
+    ),
+  fullText: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Free-form case-insensitive search matching title, description, location, or attendees. Matches events containing all query terms verbatim (AND search)."
+    ),
+  eventType: z
+    .array(eventTypeSchema)
+    .optional()
+    .describe(
+      "Optional. The event types to return. If empty, only DEFAULT, OUT_OF_OFFICE, FOCUS_TIME, and FROM_GMAIL are returned."
+    ),
   eventTypeFilter: z.array(eventTypeSchema).optional().describe("Deprecated. Use eventType."),
   orderBy: orderBySchema.optional(),
-  pageSize: pageSizeSchema,
-  pageToken: pageTokenSchema,
-  timeZone: z.string().optional()
+  pageSize: pageSizeSchema.describe("Optional. Max events per page (default 100, max 250). Recommended: 10."),
+  pageToken: pageTokenSchema.describe(
+    "Optional. Next page token. Use the value from the previous page's nextPageToken."
+  ),
+  timeZone: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Time zone (IANA ID, for example Europe/Zurich) used to resolve timezone-less dates. Default: calendar's timezone."
+    )
 })
 
 export const listEventsTool = defineTool(
@@ -67,7 +98,7 @@ export const listEventsTool = defineTool(
   {
     title: "List events",
     description:
-      "Lists events from one calendar, defaulting to now through the next 7 days. Hides WORKING_LOCATION and BIRTHDAY unless requested. fullText matches title, description, location or attendees case-insensitively; every term must match.",
+      "Returns events on the given calendar matching all specified constraints. Time constraints should not be specified unless requested by the user. For open-ended keyword or topic-based searches on the primary calendar, use search_events. Without a time range, defaults to now through the next 7 days.",
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
@@ -76,7 +107,7 @@ export const listEventsTool = defineTool(
     const client = context.calendar(slug)
     const calendarId = args.calendarId ?? "primary"
     const { timeMin, timeMax } = isoSecurityWindow(args.startTime, args.endTime)
-    const eventTypes = args.eventType ?? args.eventTypeFilter ?? [...DEFAULT_EVENT_TYPES]
+    const eventTypes = (args.eventType ?? args.eventTypeFilter ?? [...DEFAULT_EVENT_TYPES]).map(googleEventType)
     const accounts = await context.listAccounts()
 
     let meta: calendar_v3.Schema$Events | undefined

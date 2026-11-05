@@ -22,12 +22,14 @@ interface TimeSlot {
   durationMinutes: number
 }
 
-const preferencesSchema = z.object({
-  startHour: z.iso.time({ precision: -1 }).optional().describe('Earliest local start of a slot, "HH:mm".'),
-  endHour: z.iso.time({ precision: -1 }).optional().describe('Latest local end of a slot, "HH:mm".'),
-  excludeWeekends: z.boolean().optional(),
-  pageSize: z.number().int().min(1).max(50).optional()
-})
+const preferencesSchema = z
+  .object({
+    startHour: z.iso.time({ precision: -1 }).optional().describe('Preferred start hour as "HH:mm" (24-hour format).'),
+    endHour: z.iso.time({ precision: -1 }).optional().describe('Preferred end hour as "HH:mm" (24-hour format).'),
+    excludeWeekends: z.boolean().optional().describe("Exclude weekends."),
+    pageSize: z.number().int().min(1).max(50).optional().describe("Max number of slots to return. Default: 5.")
+  })
+  .describe("Preferences to find suggested time.")
 
 function mergeBusy(intervals: Interval[]): Interval[] {
   const sorted = [...intervals].sort((left, right) => left.start - right.start)
@@ -63,11 +65,21 @@ function minutesOfDay(value: string): number {
 
 const inputSchema = z.object({
   account: accountSchema,
-  attendeeEmails: z.array(z.email()).min(1),
-  startTime: dateTimeSchema,
-  endTime: dateTimeSchema,
-  durationMinutes: z.number().int().min(1).optional(),
-  timeZone: z.string().optional(),
+  attendeeEmails: z.array(z.email()).min(1).describe("Required. Attendee emails to find free time for."),
+  startTime: dateTimeSchema.describe("Required. Query interval start (ISO 8601)."),
+  endTime: dateTimeSchema.describe("Required. Query interval end (ISO 8601)."),
+  durationMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Optional. Min duration of free slot in minutes. Default: 30."),
+  timeZone: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. Time zone for search times (IANA ID, for example Europe/Zurich). Default: the offset of startTime, if none then the user's primary time zone."
+    ),
   preferences: preferencesSchema.optional()
 })
 
@@ -75,8 +87,7 @@ export const suggestTimeTool = defineTool(
   "suggest_time",
   {
     title: "Suggest a meeting time",
-    description:
-      "Inverts free/busy busy intervals into free slots, applying durationMinutes and preferences. Returns TimeSlot.start and TimeSlot.end plus deprecated startTime/endTime/durationMinutes.",
+    description: "Suggests time periods across one or more calendars.",
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },

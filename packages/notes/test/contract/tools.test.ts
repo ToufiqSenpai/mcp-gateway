@@ -5,6 +5,7 @@ import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
 
 interface PropertySchema {
   type?: string
+  description?: string
   pattern?: string
   maximum?: number
   default?: JsonValue
@@ -38,6 +39,14 @@ function props(listing: ToolListing): Record<string, PropertySchema> {
   return listing.inputSchema.properties ?? {}
 }
 
+function* walkProperties(schema: { properties?: Record<string, PropertySchema> }): Generator<[string, PropertySchema]> {
+  for (const [name, property] of Object.entries(schema.properties ?? {})) {
+    yield [name, property]
+    if (property.properties) yield* walkProperties(property)
+    if (property.items?.properties) yield* walkProperties(property.items)
+  }
+}
+
 describe("notes tool contract", () => {
   it("publishes the ten OneNote tools plus list_accounts", async () => {
     const names = (await listTools()).map(entry => entry.name)
@@ -60,6 +69,14 @@ describe("notes tool contract", () => {
     const first = JSON.stringify((await listTools()).map(entry => entry.name))
     for (let run = 0; run < 20; run += 1) {
       expect(JSON.stringify((await listTools()).map(entry => entry.name))).toBe(first)
+    }
+  })
+
+  it("documents every input field", async () => {
+    for (const listing of await listTools()) {
+      for (const [name, property] of walkProperties(listing.inputSchema)) {
+        expect(property.description, `${listing.name}.${name}`).toBeTruthy()
+      }
     }
   })
 

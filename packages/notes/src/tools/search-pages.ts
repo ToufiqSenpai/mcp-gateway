@@ -2,6 +2,7 @@ import { ToolResult, defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { toPage } from "../map"
+import { accountSchema, cursorSchema, sectionIdSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 interface PageSearchData {
@@ -15,10 +16,10 @@ export const searchPagesTool = defineTool(
     title: "Search pages",
     description: "Case-insensitive substring match on the page title only. Graph has no page-content search endpoint.",
     inputSchema: z.object({
-      account: z.string().optional(),
-      query: z.string().min(1),
-      sectionId: z.string().optional(),
-      cursor: z.string().optional()
+      account: accountSchema,
+      query: z.string().min(1).describe("Required. Case-insensitive substring to match against page titles."),
+      sectionId: sectionIdSchema.optional(),
+      cursor: cursorSchema
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },

@@ -2,6 +2,7 @@ import { ToolResult, collectAcrossAccounts, defineTool } from "@mcp-gateway/comm
 import { z } from "zod"
 
 import { toNotebook, toPage, toSection } from "../map"
+import { accountSchema, cursorSchema, notebookIdSchema, sectionGroupIdSchema, sectionIdSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 interface NotebookListData {
@@ -19,21 +20,11 @@ interface PageListData {
   nextCursor?: string
 }
 
-const accountSchema = z
-  .string()
-  .min(1)
-  .optional()
-  .describe("Account slug. Defaults to the Default Account for this MCP.")
-const cursorSchema = z
-  .string()
-  .optional()
-  .describe("Opaque cursor from a previous response. Empty string means the first page.")
-
 export const listNotebooksTool = defineTool(
   "list_notebooks",
   {
     title: "List notebooks",
-    description: "Lists OneNote notebooks for the selected Accounts.",
+    description: "Retrieves the list of notebooks the user has access to across the selected Accounts.",
     inputSchema: z.object({ account: accountSchema, cursor: cursorSchema }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
@@ -60,11 +51,11 @@ export const listSectionsTool = defineTool(
   {
     title: "List sections",
     description:
-      "Lists sections. With notebookId, only sections directly in it; with sectionGroupId, sections in that group; with neither, every section including nested ones. Passing both is invalid.",
+      "Retrieves a list of sections. With notebookId, only sections directly in that notebook; with sectionGroupId, sections in that group; with neither, every section including nested ones. Passing both is invalid.",
     inputSchema: z.object({
       account: accountSchema,
-      notebookId: z.string().optional(),
-      sectionGroupId: z.string().optional(),
+      notebookId: notebookIdSchema.optional(),
+      sectionGroupId: sectionGroupIdSchema.optional(),
       cursor: cursorSchema
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
@@ -97,10 +88,11 @@ export const listPagesTool = defineTool(
   "list_pages",
   {
     title: "List pages",
-    description: "Lists pages, across all notebooks when no sectionId is given. Lists carry no content.",
+    description:
+      "Retrieves a list of pages. With sectionId, pages in that section; with neither, pages across all notebooks. Page lists carry no content.",
     inputSchema: z.object({
       account: accountSchema,
-      sectionId: z.string().optional(),
+      sectionId: sectionIdSchema.optional(),
       cursor: cursorSchema
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }

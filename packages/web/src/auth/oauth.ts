@@ -74,7 +74,10 @@ export abstract class OAuthProvider {
   protected abstract readonly authorizeEndpoint: string
   protected abstract readonly tokenEndpoint: string
 
-  public static for(env: Env, provider: Provider): OAuthProvider {
+  public static for(
+    env: Pick<Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "MICROSOFT_CLIENT_ID" | "MICROSOFT_CLIENT_SECRET">,
+    provider: Provider
+  ): OAuthProvider {
     return provider === "google"
       ? new GoogleOAuthProvider(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)
       : new MicrosoftOAuthProvider(env.MICROSOFT_CLIENT_ID, env.MICROSOFT_CLIENT_SECRET)
@@ -94,7 +97,7 @@ export abstract class OAuthProvider {
     url.searchParams.set("state", input.state)
     url.searchParams.set("code_challenge", input.codeChallenge)
     url.searchParams.set("code_challenge_method", "S256")
-    for (const [key, value] of this.authorizationParams()) {
+    for (const [key, value] of this.authorizationParams(input.scopes)) {
       url.searchParams.set(key, value)
     }
     return url
@@ -128,7 +131,7 @@ export abstract class OAuthProvider {
   /** Providers without a revocation endpoint change nothing. */
   public async revoke(_token: string): Promise<void> {}
 
-  protected authorizationParams(): ReadonlyMap<string, string> {
+  protected authorizationParams(_scopes: readonly string[]): ReadonlyMap<string, string> {
     return new Map()
   }
 
@@ -176,7 +179,7 @@ class GoogleOAuthProvider extends OAuthProvider {
   protected readonly tokenEndpoint = GOOGLE_TOKEN
 
   /** Without `access_type=offline` Google issues no refresh token; consent repeats it on reauth. */
-  protected override authorizationParams(): ReadonlyMap<string, string> {
+  protected override authorizationParams(_scopes: readonly string[]): ReadonlyMap<string, string> {
     return new Map([
       ["access_type", "offline"],
       ["prompt", "consent"]
@@ -195,6 +198,14 @@ class GoogleOAuthProvider extends OAuthProvider {
 class MicrosoftOAuthProvider extends OAuthProvider {
   protected readonly authorizeEndpoint = MICROSOFT_AUTHORIZE
   protected readonly tokenEndpoint = MICROSOFT_TOKEN
+
+  /**
+   * `offline_access` must be requested to receive a refresh token. Microsoft does not list it
+   * in the granted `scope` of the token response, so it is added here, not to REQUIRED_SCOPES.
+   */
+  protected override authorizationParams(scopes: readonly string[]): ReadonlyMap<string, string> {
+    return new Map([["scope", [...scopes, "offline_access"].join(" ")]])
+  }
 
   /** Microsoft requires the scope list on refresh; Google rejects it. */
   protected override refreshParams(scopes: readonly string[]): ReadonlyMap<string, string> {

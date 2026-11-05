@@ -5,17 +5,19 @@
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "scripts": {
     "predev": "pnpm --filter @mcp-gateway/web css:build",
-    "dev": "wrangler dev --env-file .env --infer-origin-from-routes=false",
+    "dev": "node scripts/dev.ts",
     "build": "pnpm --filter @mcp-gateway/web css:build",
     "test": "pnpm -r test",
     "pretest": "pnpm --filter @mcp-gateway/web css:build",
     "typecheck": "tsc -b",
     "lint": "oxlint packages",
     "format": "oxfmt packages",
+    "format:check": "oxfmt --check packages",
+    "ci": "pnpm format:check && pnpm lint && pnpm typecheck",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",

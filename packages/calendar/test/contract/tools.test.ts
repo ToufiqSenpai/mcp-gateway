@@ -92,6 +92,17 @@ describe("calendar tool contract", () => {
     expect(create["attachments"]?.items?.properties?.["fileUrl"]?.["format"]).toBe("uri")
   })
 
+  it("uses the documented attendee, guest permission and working location shapes", async () => {
+    const create = props(tool(await listTools(), "create_event"))
+    const attendee = create["attendees"]?.items?.properties
+
+    expect(attendee?.["optionalAttendee"]).toBeDefined()
+    expect(attendee?.["optional"]).toBeUndefined()
+    expect(create["guestPermissions"]?.properties?.["guestsCanModify"]).toBeDefined()
+    expect(create["guestPermissions"]?.["items"]).toBeUndefined()
+    expect(create["workingLocationProperties"]?.properties?.["customLocationLabel"]).toBeDefined()
+  })
+
   it('exposes suggest_time preferences as "HH:mm" hours with pageSize default 5', async () => {
     const preferences = props(tool(await listTools(), "suggest_time"))["preferences"]
     expect(preferences?.properties?.["startHour"]?.["pattern"]).toContain("[0-5]")

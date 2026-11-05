@@ -3,18 +3,20 @@ import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toSection } from "../map"
+import { accountSchema, displayNameSchema, notebookIdSchema, sectionGroupIdSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 export const createSectionTool = defineTool(
   "create_section",
   {
     title: "Create section",
-    description: "Creates a section. Exactly one parent is required: notebookId or sectionGroupId.",
+    description:
+      "Creates a new section in the specified notebook or section group. Exactly one parent is required: notebookId or sectionGroupId.",
     inputSchema: z.object({
-      account: z.string().optional(),
-      displayName: z.string().min(1),
-      notebookId: z.string().optional(),
-      sectionGroupId: z.string().optional()
+      account: accountSchema,
+      displayName: displayNameSchema,
+      notebookId: notebookIdSchema.optional(),
+      sectionGroupId: sectionGroupIdSchema.optional()
     }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },

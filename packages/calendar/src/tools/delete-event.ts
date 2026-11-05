@@ -7,17 +7,23 @@ import type { ToolContext } from "./tool-context"
 
 const inputSchema = z.object({
   account: accountSchema,
-  eventId: z.string(),
-  calendarId: z.string().optional(),
-  notificationLevel: notificationLevelSchema.optional()
+  eventId: z.string().describe("Required. The ID of the event to delete."),
+  calendarId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. ID of the calendar containing the event. Email address - can be resolved using list_calendars. Default: primary calendar."
+    ),
+  notificationLevel: notificationLevelSchema
+    .optional()
+    .describe("Optional. Which email notification should be sent for this event update.")
 })
 
 export const deleteEventTool = defineTool(
   "delete_event",
   {
     title: "Delete event",
-    description:
-      "Deletes an event and returns the full Event it removed. events.delete returns an empty body, so the event is read first.",
+    description: "Deletes an event on the given calendar. Returns the event it removed.",
     inputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true }
   },

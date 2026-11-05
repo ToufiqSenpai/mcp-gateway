@@ -8,9 +8,9 @@ import type { ToolContext } from "./tool-context"
 
 const inputSchema = z.object({
   account: accountSchema,
-  query: z.string().min(1),
-  pageSize: pageSizeSchema,
-  pageToken: pageTokenSchema
+  query: z.string().min(1).describe("Required. Query string to search for events (case-insensitive)."),
+  pageSize: pageSizeSchema.describe("Optional. Maximum number of entries returned on one result page."),
+  pageToken: pageTokenSchema.describe("Optional. Token specifying which result page to return.")
 })
 
 interface EventSearchData {
@@ -23,7 +23,7 @@ export const searchEventsTool = defineTool(
   {
     title: "Search events",
     description:
-      "Literal text search over the primary calendar, matching text rather than meaning. Takes no calendarId and no time bounds.",
+      "Searches events on the user's primary calendar by literal text, matching text rather than meaning. Takes no calendarId and no time bounds.",
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },

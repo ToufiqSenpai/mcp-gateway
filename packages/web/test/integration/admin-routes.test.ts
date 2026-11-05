@@ -57,12 +57,16 @@ describe("admin routes", () => {
     expect(home.status).toBe(200)
     expect(homeHtml).toContain("/mcps/calendar")
     expect(homeHtml).toContain("/mcps/notes")
+    expect(homeHtml).not.toContain("<table")
 
     const page = await browser.get("/admin/mcps/calendar")
     const html = await page.text()
     expect(html).toContain("personal")
     expect(html).toContain("operator@example.com")
-    expect(html).toContain("active")
+    expect(html).toContain("Reauth")
+    expect(html).not.toContain("Provider:")
+    expect(html).not.toContain("Scopes")
+    expect(html).toContain("calendar_2020q4_48dp.png")
   })
 
   it("answers an unknown MCP with 404", async () => {

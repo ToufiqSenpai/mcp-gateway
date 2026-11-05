@@ -1,9 +1,9 @@
 import type { Account } from "../db/schema"
+import { productIcon } from "./icons"
 import { Layout } from "./layout"
 
 export interface McpPageProps {
   mcp: string
-  provider: string
   accounts: Account[]
   csrf: string
   devBypass: boolean
@@ -25,11 +25,8 @@ export function errorSentence(code: string): string {
   return ERROR_SENTENCES.get(code) ?? "The request could not be completed."
 }
 
-function expiry(value: number): string {
-  return new Date(value * 1000).toISOString().replace("T", " ").slice(0, 19)
-}
-
-export function McpPage({ mcp, provider, accounts, csrf, devBypass, notice, noticeKind }: McpPageProps) {
+export function McpPage({ mcp, accounts, csrf, devBypass, notice, noticeKind }: McpPageProps) {
+  const icon = productIcon(mcp)
   return (
     <Layout title={`${mcp} — MCP Gateway`} devBypass={devBypass}>
       <nav class="mb-4 text-sm">
@@ -37,10 +34,10 @@ export function McpPage({ mcp, provider, accounts, csrf, devBypass, notice, noti
           ← All MCPs
         </a>
       </nav>
-      <h1 class="mb-1 text-2xl font-bold">{mcp}</h1>
-      <p class="mb-6 text-sm text-slate-600">
-        Provider: {provider} · endpoint <span class="font-mono">/mcps/{mcp}</span>
-      </p>
+      <div class="mb-6 flex items-center gap-2">
+        {icon ? <img src={icon.src} alt="" width="24" height="24" class="h-6 w-6" /> : null}
+        <h1 class="text-2xl font-bold">{mcp}</h1>
+      </div>
 
       {notice ? (
         <p
@@ -82,12 +79,6 @@ export function McpPage({ mcp, provider, accounts, csrf, devBypass, notice, noti
                 <th class="py-2">Slug</th>
                 <th class="py-2">Email</th>
                 <th class="py-2">Name</th>
-                <th class="py-2">State</th>
-                <th class="py-2">Default</th>
-                <th class="py-2">Scopes</th>
-                <th class="py-2">Access expiry</th>
-                <th class="py-2">Last refreshed</th>
-                <th class="py-2">Last error</th>
                 <th class="py-2">Actions</th>
               </tr>
             </thead>
@@ -97,12 +88,6 @@ export function McpPage({ mcp, provider, accounts, csrf, devBypass, notice, noti
                   <td class="py-2 font-mono">{account.slug}</td>
                   <td class="py-2">{account.email}</td>
                   <td class="py-2">{account.displayName ?? "—"}</td>
-                  <td class="py-2">{account.state}</td>
-                  <td class="py-2">{account.isDefault === 1 ? "yes" : "—"}</td>
-                  <td class="py-2 text-xs text-slate-600">{account.scopes}</td>
-                  <td class="py-2">{expiry(account.accessTokenExpiresAt)}</td>
-                  <td class="py-2">{account.lastRefreshedAt ? expiry(account.lastRefreshedAt) : "—"}</td>
-                  <td class="py-2">{account.lastError ?? "—"}</td>
                   <td class="py-2">
                     <div class="flex flex-wrap gap-1">
                       <form method="post" action={`/admin/mcps/${mcp}/accounts/${account.slug}/reauth`}>

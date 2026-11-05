@@ -1,15 +1,19 @@
 import type { calendar_v3 } from "@googleapis/calendar"
 
+import type { GuestPermissions, WorkingLocationProperties } from "./schemas"
+
 /** A tool-surface attendee; REST-only members never leave this package. */
 export interface CalendarAttendee {
+  id?: string
   email?: string
   displayName?: string
-  optional?: boolean
+  optionalAttendee?: boolean
+  resource?: boolean
   responseStatus?: string
   comment?: string
+  additionalGuests?: number
   self?: boolean
   organizer?: boolean
-  resource?: boolean
 }
 
 export interface CalendarAttachment {
@@ -55,7 +59,8 @@ export interface CalendarEvent {
   visibility?: string
   transparency?: string
   colorId?: string
-  workingLocationProperties?: calendar_v3.Schema$EventWorkingLocationProperties
+  workingLocationProperties?: WorkingLocationProperties
+  guestPermissions?: GuestPermissions
   htmlLink?: string
   created?: string
   updated?: string
@@ -89,15 +94,39 @@ export function toDateOrDateTimeInput(
 
 function toAttendee(raw: calendar_v3.Schema$EventAttendee): CalendarAttendee {
   const attendee: CalendarAttendee = {}
+  if (raw.id) attendee.id = raw.id
   if (raw.email) attendee.email = raw.email
   if (raw.displayName) attendee.displayName = raw.displayName
-  if (raw.optional !== undefined && raw.optional !== null) attendee.optional = raw.optional
+  if (raw.optional !== undefined && raw.optional !== null) attendee.optionalAttendee = raw.optional
+  if (raw.resource !== undefined && raw.resource !== null) attendee.resource = raw.resource
   if (raw.responseStatus) attendee.responseStatus = raw.responseStatus
   if (raw.comment) attendee.comment = raw.comment
+  if (raw.additionalGuests !== undefined && raw.additionalGuests !== null) {
+    attendee.additionalGuests = raw.additionalGuests
+  }
   if (raw.self !== undefined && raw.self !== null) attendee.self = raw.self
   if (raw.organizer !== undefined && raw.organizer !== null) attendee.organizer = raw.organizer
-  if (raw.resource !== undefined && raw.resource !== null) attendee.resource = raw.resource
   return attendee
+}
+
+function toWorkingLocationProperties(
+  raw: calendar_v3.Schema$EventWorkingLocationProperties
+): WorkingLocationProperties {
+  const properties: WorkingLocationProperties = {}
+  const type = raw.type === "homeOffice" ? "HOME_OFFICE" : raw.type === "customLocation" ? "CUSTOM_LOCATION" : undefined
+  if (type) properties.type = type
+  if (raw.customLocation?.label) properties.customLocationLabel = raw.customLocation.label
+  return properties
+}
+
+/** The tool surface keeps protobuf-style names; REST spells the same values in camelCase. */
+export function toWorkingLocationPropertiesInput(
+  properties: WorkingLocationProperties
+): calendar_v3.Schema$EventWorkingLocationProperties {
+  if (properties.type === "CUSTOM_LOCATION") {
+    return { type: "customLocation", customLocation: { label: properties.customLocationLabel } }
+  }
+  return { type: "homeOffice" }
 }
 
 function toAttachment(raw: calendar_v3.Schema$EventAttachment): CalendarAttachment {
@@ -142,7 +171,26 @@ export function toEvent(raw: calendar_v3.Schema$Event): CalendarEvent {
   if (raw.visibility) event.visibility = raw.visibility
   if (raw.transparency) event.transparency = raw.transparency
   if (raw.colorId) event.colorId = raw.colorId
-  if (raw.workingLocationProperties) event.workingLocationProperties = raw.workingLocationProperties
+  if (raw.workingLocationProperties) {
+    event.workingLocationProperties = toWorkingLocationProperties(raw.workingLocationProperties)
+  }
+  if (
+    raw.guestsCanInviteOthers !== undefined ||
+    raw.guestsCanModify !== undefined ||
+    raw.guestsCanSeeOtherGuests !== undefined
+  ) {
+    const permissions: GuestPermissions = {}
+    if (raw.guestsCanInviteOthers !== undefined && raw.guestsCanInviteOthers !== null) {
+      permissions.guestsCanInviteOthers = raw.guestsCanInviteOthers
+    }
+    if (raw.guestsCanModify !== undefined && raw.guestsCanModify !== null) {
+      permissions.guestsCanModify = raw.guestsCanModify
+    }
+    if (raw.guestsCanSeeOtherGuests !== undefined && raw.guestsCanSeeOtherGuests !== null) {
+      permissions.guestsCanSeeGuests = raw.guestsCanSeeOtherGuests
+    }
+    event.guestPermissions = permissions
+  }
   if (raw.htmlLink) event.htmlLink = raw.htmlLink
   if (raw.created) event.created = raw.created
   if (raw.updated) event.updated = raw.updated
@@ -156,17 +204,42 @@ function videoEntryPoint(raw: calendar_v3.Schema$Event): string | undefined {
   )
 }
 
+export function toAttendeeEntry(attendee: {
+  email: string
+  optionalAttendee?: boolean
+  resource?: boolean
+  displayName?: string
+  responseStatus?: string
+  comment?: string
+  additionalGuests?: number
+}): calendar_v3.Schema$EventAttendee {
+  const entry: calendar_v3.Schema$EventAttendee = { email: attendee.email }
+  if (attendee.optionalAttendee !== undefined) entry.optional = attendee.optionalAttendee
+  if (attendee.resource !== undefined) entry.resource = attendee.resource
+  if (attendee.displayName) entry.displayName = attendee.displayName
+  if (attendee.responseStatus) entry.responseStatus = attendee.responseStatus
+  if (attendee.additionalGuests !== undefined) entry.additionalGuests = attendee.additionalGuests
+  return entry
+}
+
 export function toAttendeeList(
-  attendees: { email?: string; optional?: boolean; displayName?: string }[] | undefined
+  attendees:
+    | {
+        email?: string
+        optionalAttendee?: boolean
+        resource?: boolean
+        displayName?: string
+        responseStatus?: string
+        comment?: string
+        additionalGuests?: number
+      }[]
+    | undefined
 ): calendar_v3.Schema$EventAttendee[] | undefined {
   if (!attendees?.length) return undefined
   const result: calendar_v3.Schema$EventAttendee[] = []
   for (const attendee of attendees) {
     if (!attendee.email) continue
-    const entry: calendar_v3.Schema$EventAttendee = { email: attendee.email }
-    if (attendee.optional !== undefined) entry.optional = attendee.optional
-    if (attendee.displayName) entry.displayName = attendee.displayName
-    result.push(entry)
+    result.push(toAttendeeEntry({ ...attendee, email: attendee.email }))
   }
   return result
 }

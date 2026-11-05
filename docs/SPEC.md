@@ -340,7 +340,8 @@ admin page shows a "dev auth bypass" banner. A test asserts the bypass is unreac
 3. Redirect to the authorize URL built by `OAuthProvider`, **patched before redirect**:
    - Google: `access_type=offline` always and `prompt=consent` always (also on reauth);
      without `access_type=offline` Google issues no refresh token at all.
-   - Microsoft: the scope list always includes `offline_access`.
+   - Microsoft: the authorize URL appends `offline_access` so the token endpoint returns a
+     refresh token. It is a request directive, not part of the granted access-token scopes.
 4. Callback: `/oauth/callback/<provider>`. The Provider comes from the path segment;
    `mcp`, `slug` and `target_account_id` come from the state row, never from the path.
 5. Validate: cookie `oauth_flow` === `state` query param; state row exists and is
@@ -432,10 +433,11 @@ instead of claiming there is no default (drift recorded during build).
 | MCP | Provider | Required scope set |
 | --- | --- | --- |
 | `calendar` | Google | `openid email profile https://www.googleapis.com/auth/calendar` |
-| `notes` | Microsoft | `offline_access User.Read Notes.ReadWrite` |
+| `notes` | Microsoft | `User.Read Notes.ReadWrite` |
 
-The set is a constant in the MCP's own module and is the single source used by the authorize
-URL, the callback check and the call-path check.
+The set is a constant in the MCP's own module and is the single source used by the callback
+check and the call-path check. The authorize URL adds provider directives on top: Google
+`access_type=offline`, Microsoft `offline_access`.
 
 **Google uses the blanket `calendar` scope.** The narrower three-scope set the reference
 server publishes is read-only and cannot authorize its four write tools, Google publishes
@@ -677,7 +679,16 @@ search_events(query, pageSize?, pageToken?)
 `NOTIFICATION_LEVEL_UNSPECIFIED`, `NONE`, `EXTERNAL_ONLY`, `ALL`. `availability`:
 `AVAILABILITY_UNSPECIFIED`, `AVAILABILITY_BUSY`, `AVAILABILITY_FREE`. `visibility`:
 `default`, `public`, `private`. `respond_to_event.responseStatus`: `declined`, `tentative`,
-`accepted` — `needsAction` is deliberately absent.
+`accepted` — `needsAction` is deliberately absent. `workingLocationProperties.type`:
+`WORKING_LOCATION_TYPE_UNSPECIFIED`, `HOME_OFFICE`, `CUSTOM_LOCATION`.
+
+**Shapes.** `attendee`: `{ email, displayName?, optionalAttendee?, resource?,
+responseStatus?, comment?, additionalGuests? }`. `guestPermissions`:
+`{ guestsCanInviteOthers?, guestsCanModify?, guestsCanSeeGuests? }`.
+`workingLocationProperties`: `{ type?, customLocationLabel? }`, where
+`customLocationLabel` is required for `CUSTOM_LOCATION`. These mirror the reference MCP
+server; REST calls map them to `optional`, `guestsCanSeeOtherGuests`, and
+`homeOffice` / `customLocation.label`.
 
 **`Event`** carries `id`, `summary`, `description`, `location`, `start`, `end`,
 `originalStartTime`, `status`, `eventType`, `recurrence`, `recurringEventId`, `attendees`,
@@ -924,7 +935,7 @@ Server-rendered JSX through Hono. No client-side JavaScript anywhere.
 | Route | Purpose |
 | --- | --- |
 | `GET /` | `302` to `/admin` |
-| `GET /admin` | MCP list: slug, endpoint, Provider, Accounts per state, default Account |
+| `GET /admin` | MCP cards: product icon, slug, Provider, endpoint, Accounts per state, default Account |
 | `GET /admin/mcps/:mcp` | Accounts table and actions |
 | `POST /admin/mcps/:mcp/accounts` | Start the add flow with a typed slug |
 | `POST /admin/mcps/:mcp/accounts/:slug/reauth` | Start reauth |
@@ -934,8 +945,7 @@ Server-rendered JSX through Hono. No client-side JavaScript anywhere.
 | `POST /admin/mcps/:mcp/test` | Run one tool in-process |
 | `GET /admin/app.css` | Built stylesheet |
 
-Accounts table columns: slug, email, display name, state, default flag, scopes,
-access-token expiry, last refreshed, last error code. Revoke is the only removal.
+Accounts table columns: slug, email, display name, actions. Revoke is the only removal.
 
 **Not in v1:** hard delete, slug rename, scope editing, raw token reveal, audit log, metrics
 or charts, search or pagination, multi-user roles, editing Provider client credentials, an
@@ -954,8 +964,8 @@ self-`fetch`, so no service token is stored in the Worker. It renders the result
 `isError`, plus duration. No history, no persistence. Write tools are callable and labelled as
 writes.
 
-**Redaction.** Shown: email, display name, slug, state, default flag, scopes, expiry and
-refresh timestamps, `last_error` as a code. Never rendered: access or refresh token
+**Redaction.** Shown: email, display name, slug and the actions allowed by state and the
+default flag. Never rendered: access or refresh token
 ciphertext or plaintext, Provider client secrets, `provider_subject`, `TOKEN_ENCRYPTION_KEY`,
 any JWT, `oauth_states` contents, raw Provider response bodies.
 
@@ -965,8 +975,8 @@ emails redacted. `500` pages carry no stack trace.
 **Tailwind.** Tailwind v4 with `tailwindcss` + `@tailwindcss/cli`. `src/admin/app.css` holds
 `@import "tailwindcss";` plus `@source` globs over the TS templates. Built with
 `tailwindcss -i packages/web/src/admin/app.css -o packages/web/src/admin/app.generated.css --minify`
-before dev and deploy; the generated file is gitignored. Served as a Wrangler **Text module**
-from `GET /admin/app.css` with `Cache-Control: private, max-age=3600` and an ETag derived
+before deploy, and watched with `--watch` alongside `wrangler dev --live-reload`; the generated file is gitignored. Served as a Wrangler **Text module**
+from `GET /admin/app.css` with `Cache-Control: private, max-age=3600` (`no-store` under the dev bypass) and an ETag derived
 from the build hash. No Static Assets, no PostCSS, no Vite.
 
 ---
@@ -996,14 +1006,17 @@ tool/prompt/resource, `isError` for tool failures, `listChanged` absent, determi
 
 ## 17. Scripts, lint and CI
 
-Root scripts: `dev`, `build`, `test`, `typecheck`, `lint`, `format`, `db:generate`,
-`db:migrate:local`, `db:migrate:remote`.
+Root scripts: `dev`, `build`, `test`, `typecheck`, `lint`, `format`, `format:check`, `ci`,
+`db:generate`, `db:migrate:local`, `db:migrate:remote`.
 
 - `typecheck`: `tsc -b` over project references.
-- `lint`: `oxlint`. `format`: `oxfmt`. No ESLint, no Prettier.
-- `predev` / `predeploy`: the Tailwind build.
-- CI on every push and PR: `pnpm install --frozen-lockfile`, `typecheck`, `lint`, `test`.
-- Deploy is `workflow_dispatch` only. No push-to-deploy in v1.
+- `lint`: `oxlint`. `format`: `oxfmt`. `format:check`: `oxfmt --check`. No ESLint, no Prettier.
+- `predev` / `predeploy`: the initial Tailwind build. `dev` runs `scripts/dev.ts`, which starts
+  the CSS watcher and `wrangler dev --live-reload` in parallel.
+- On pull requests: `quality` (`pnpm run ci`: format check, lint, typecheck) and `test`
+  (`pnpm test`, every package) as parallel jobs.
+- A push to `main` deploys: `db:migrate:remote` then `pnpm deploy`. `workflow_dispatch`
+  redeploys. No gates run on that workflow; PR checks are the gate.
 
 ---
 

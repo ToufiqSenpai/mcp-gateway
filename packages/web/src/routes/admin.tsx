@@ -71,7 +71,7 @@ adminRoutes.use("/mcps/:mcp/*", async (c, next) => {
 adminRoutes.get("/app.css", c => {
   const headers = {
     "Content-Type": "text/css; charset=utf-8",
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": isDevBypass(c.env, c.req.url) ? "no-store" : "private, max-age=3600",
     ETag: CSS_ETAG
   }
   if (c.req.header("If-None-Match") === CSS_ETAG) return c.body(null, 304, headers)
@@ -97,7 +97,6 @@ adminRoutes.get("/mcps/:mcp", async c => {
   return c.html(
     <McpPage
       mcp={mcp}
-      provider={MCP_REGISTRY[mcp].provider}
       accounts={accounts}
       csrf={csrf}
       devBypass={isDevBypass(c.env, c.req.url)}

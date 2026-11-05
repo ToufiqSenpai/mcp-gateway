@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "css:build": "tailwindcss -i src/admin/app.css -o src/admin/app.generated.css --minify",
+    "css:watch": "tailwindcss -i src/admin/app.css -o src/admin/app.generated.css --watch=always --minify",
     "test": "vitest run",
     "test:watch": "vitest"
   },

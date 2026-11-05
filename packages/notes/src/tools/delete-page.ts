@@ -1,6 +1,7 @@
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
+import { accountSchema, pageIdSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 export const deletePageTool = defineTool(
@@ -8,7 +9,7 @@ export const deletePageTool = defineTool(
   {
     title: "Delete page",
     description: "Deletes a page. Graph exposes no undo or trash step.",
-    inputSchema: z.object({ account: z.string().optional(), pageId: z.string() }),
+    inputSchema: z.object({ account: accountSchema, pageId: pageIdSchema }),
     annotations: { destructiveHint: true, idempotentHint: true }
   },
   async (args, context: ToolContext) => {

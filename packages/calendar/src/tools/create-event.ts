@@ -2,7 +2,7 @@ import type { calendar_v3 } from "@googleapis/calendar"
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { toAttendeeList, toEvent } from "../map"
+import { toAttendeeList, toEvent, toWorkingLocationPropertiesInput } from "../map"
 import {
   accountSchema,
   attachmentSchema,
@@ -10,48 +10,81 @@ import {
   availabilitySchema,
   dateTimeSchema,
   eventTypeSchema,
+  googleEventType,
+  guestPermissionsSchema,
   notificationLevelSchema,
   reminderSchema,
   sendUpdatesFor,
-  visibilitySchema
+  visibilitySchema,
+  workingLocationPropertiesSchema
 } from "../schemas"
+import type { GuestPermissions } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
-const guestPermissionsSchema = z.enum(["modify", "inviteOthers", "seeOtherInvites"])
-
-function permissionsToBody(permissions: string[] | undefined): calendar_v3.Schema$Event {
+function permissionsToBody(permissions: GuestPermissions | undefined): calendar_v3.Schema$Event {
   const body: calendar_v3.Schema$Event = {}
   if (!permissions) return body
-  if (permissions.includes("modify")) body.guestsCanModify = true
-  if (permissions.includes("inviteOthers")) body.guestsCanInviteOthers = true
-  if (permissions.includes("seeOtherInvites")) body.guestsCanSeeOtherGuests = true
+  if (permissions.guestsCanModify !== undefined) body.guestsCanModify = permissions.guestsCanModify
+  if (permissions.guestsCanInviteOthers !== undefined) body.guestsCanInviteOthers = permissions.guestsCanInviteOthers
+  if (permissions.guestsCanSeeGuests !== undefined) body.guestsCanSeeOtherGuests = permissions.guestsCanSeeGuests
   return body
 }
 
 const inputSchema = z.object({
   account: accountSchema,
-  summary: z.string(),
-  startTime: dateTimeSchema,
-  endTime: dateTimeSchema,
-  calendarId: z.string().optional(),
-  allDay: z.boolean().optional(),
-  addGoogleMeetUrl: z.boolean().optional(),
-  googleMeetUrl: z.string().optional(),
-  attendees: z.array(attendeeSchema).optional(),
+  summary: z.string().describe("Required. Title."),
+  startTime: dateTimeSchema.describe("Required. Start time (ISO 8601, for example '2026-04-30T10:00:00Z')."),
+  endTime: dateTimeSchema.describe("Required. End time (ISO 8601, for example '2026-04-30T11:00:00Z')."),
+  calendarId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. ID of the calendar to create the event on. Email address - can be resolved using list_calendars. Default: primary calendar."
+    ),
+  allDay: z
+    .boolean()
+    .optional()
+    .describe("Optional. Whether the event spans the entire day. If true, start/end times are treated as midnight."),
+  addGoogleMeetUrl: z.boolean().optional().describe("Optional. Create and add a Google Meet URL. Default: false."),
+  googleMeetUrl: z
+    .string()
+    .optional()
+    .describe("Optional. Specific Google Meet URL or meeting ID. Overrides addGoogleMeetUrl."),
+  attendees: z
+    .array(attendeeSchema)
+    .optional()
+    .describe(
+      "Optional. Attendees of the event. For events created on the primary calendar with at least one other attendee, the current user is added automatically if not already included."
+    ),
   attendeeEmails: z.array(z.email()).optional().describe("Deprecated. Use attendees."),
-  attachments: z.array(attachmentSchema).optional(),
-  availability: availabilitySchema.optional(),
-  colorId: z.string().optional(),
-  description: z.string().optional(),
-  eventType: eventTypeSchema.optional(),
-  guestPermissions: z.array(guestPermissionsSchema).optional(),
-  location: z.string().optional(),
-  notificationLevel: notificationLevelSchema.optional(),
-  overrideReminders: z.array(reminderSchema).optional(),
-  recurrenceData: z.array(z.string()).optional(),
-  timeZone: z.string().optional(),
-  visibility: visibilitySchema.optional(),
-  workingLocationProperties: z.record(z.string(), z.unknown()).optional()
+  attachments: z.array(attachmentSchema).optional().describe("Optional. File attachments."),
+  availability: availabilitySchema.optional().describe("Optional. Availability setting."),
+  colorId: z
+    .string()
+    .optional()
+    .describe("Optional. The color of the event. It is an ID from the calendar color palette ('1'-'11')."),
+  description: z.string().optional().describe("Optional. Description. Can contain HTML."),
+  eventType: eventTypeSchema.optional().describe("Optional. Type of the event."),
+  guestPermissions: guestPermissionsSchema.optional().describe("Optional. Guest permissions."),
+  location: z.string().optional().describe("Optional. Location."),
+  notificationLevel: notificationLevelSchema
+    .optional()
+    .describe("Optional. Which email notification should be sent for this event update. Default: ALL."),
+  overrideReminders: z.array(reminderSchema).optional().describe("Optional. Reminders override calendar defaults."),
+  recurrenceData: z
+    .array(z.string())
+    .optional()
+    .describe("Optional. Recurrence rules as RRULE, RDATE, or EXDATE strings (per RFC 5545)."),
+  timeZone: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. IANA Time Zone Database name (for example, America/Los_Angeles). Default: the user's primary time zone. Overrides offsets in startTime and endTime."
+    ),
+  visibility: visibilitySchema.optional().describe("Optional. Visibility of the event."),
+  workingLocationProperties: workingLocationPropertiesSchema
+    .optional()
+    .describe("Optional. Working location properties (if eventType is WORKING_LOCATION).")
 })
 
 export const createEventTool = defineTool(
@@ -59,7 +92,7 @@ export const createEventTool = defineTool(
   {
     title: "Create event",
     description:
-      "Creates an event and returns the full Event. notificationLevel defaults to ALL, which emails guests; REST defaults to sending nothing.",
+      "Creates an event on the given calendar. notificationLevel defaults to ALL, which emails guests; REST defaults to sending nothing.",
     inputSchema,
     annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true }
   },
@@ -99,12 +132,14 @@ export const createEventTool = defineTool(
     if (args.description) requestBody.description = args.description
     if (args.colorId) requestBody.colorId = args.colorId
     if (args.visibility) requestBody.visibility = args.visibility
-    if (args.eventType) requestBody.eventType = args.eventType
+    if (args.eventType) requestBody.eventType = googleEventType(args.eventType)
     if (attendees) requestBody.attendees = attendees
     if (args.attachments) requestBody.attachments = args.attachments
     if (args.recurrenceData) requestBody.recurrence = args.recurrenceData
     if (args.overrideReminders) requestBody.reminders = { useDefault: false, overrides: args.overrideReminders }
-    if (args.workingLocationProperties) requestBody.workingLocationProperties = args.workingLocationProperties
+    if (args.workingLocationProperties) {
+      requestBody.workingLocationProperties = toWorkingLocationPropertiesInput(args.workingLocationProperties)
+    }
     if (args.availability === "AVAILABILITY_FREE") requestBody.transparency = "transparent"
     if (args.availability === "AVAILABILITY_BUSY") requestBody.transparency = "opaque"
     Object.assign(requestBody, permissionsToBody(args.guestPermissions))

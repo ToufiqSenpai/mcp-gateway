@@ -3,14 +3,15 @@ import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toNotebook } from "../map"
+import { accountSchema, displayNameSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 export const createNotebookTool = defineTool(
   "create_notebook",
   {
     title: "Create notebook",
-    description: "Creates a notebook. This changes the container list, so the enumeration cache is invalidated.",
-    inputSchema: z.object({ account: z.string().optional(), displayName: z.string().min(1) }),
+    description: "Creates a notebook. The gateway invalidates its enumeration cache after the write.",
+    inputSchema: z.object({ account: accountSchema, displayName: displayNameSchema }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },
   async (args, context: ToolContext) => {

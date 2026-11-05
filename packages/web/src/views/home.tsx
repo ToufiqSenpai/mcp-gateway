@@ -1,7 +1,8 @@
 import { AccountRepository } from "../db/account-repository"
 import type { Env } from "../env"
 import { MCP_REGISTRY, MCP_SLUGS } from "../mcps/registry"
-import { Layout } from "../views/layout"
+import { productIcon } from "./icons"
+import { Layout } from "./layout"
 
 export interface McpRow {
   slug: string
@@ -29,35 +30,31 @@ export function HomePage({ rows, devBypass }: { rows: McpRow[]; devBypass: boole
   return (
     <Layout title="MCP Gateway" devBypass={devBypass}>
       <h1 class="mb-6 text-2xl font-bold">MCPs</h1>
-      <table class="w-full border-collapse text-left text-sm">
-        <thead>
-          <tr class="border-b border-slate-300">
-            <th class="py-2">MCP</th>
-            <th class="py-2">Endpoint</th>
-            <th class="py-2">Provider</th>
-            <th class="py-2">Accounts</th>
-            <th class="py-2">Default</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(row => (
-            <tr class="border-b border-slate-200">
-              <td class="py-2 font-medium">
-                <a class="text-blue-700 underline" href={`/admin/mcps/${row.slug}`}>
-                  {row.slug}
-                </a>
-              </td>
-              <td class="py-2 font-mono text-xs">/mcps/{row.slug}</td>
-              <td class="py-2">{row.provider}</td>
-              <td class="py-2">
-                {row.counts.active ?? 0} active, {row.counts.needs_reauth ?? 0} reauth, {row.counts.revoked ?? 0}{" "}
+      <div class="grid gap-4 sm:grid-cols-2">
+        {rows.map(row => {
+          const icon = productIcon(row.slug)
+          return (
+            <a
+              href={`/admin/mcps/${row.slug}`}
+              class="group block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
+            >
+              <div class="flex items-center gap-2">
+                {icon ? <img src={icon.src} alt="" width="24" height="24" class="h-6 w-6" /> : null}
+                <h2 class="text-lg font-semibold group-hover:text-blue-700">{row.slug}</h2>
+                <span class="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{row.provider}</span>
+              </div>
+              <p class="mt-2 font-mono text-xs text-slate-500">/mcps/{row.slug}</p>
+              <p class="mt-3 text-sm text-slate-600">
+                {row.counts.active ?? 0} active · {row.counts.needs_reauth ?? 0} reauth · {row.counts.revoked ?? 0}{" "}
                 revoked
-              </td>
-              <td class="py-2">{row.defaultSlug ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </p>
+              <p class="mt-1 text-xs text-slate-600">
+                Default: <span class="font-mono">{row.defaultSlug ?? "—"}</span>
+              </p>
+            </a>
+          )
+        })}
+      </div>
     </Layout>
   )
 }

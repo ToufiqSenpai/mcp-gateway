@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toPage } from "../map"
+import { accountSchema, includeIdsSchema, pageIdSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 export const CONTENT_CAP = 100_000
@@ -25,11 +26,11 @@ export const getPageTool = defineTool(
   {
     title: "Get page",
     description:
-      "Returns one page with its HTML content verbatim. content is capped at 100 000 characters at the last complete tag; contentLength is the full length.",
+      "Retrieves the properties and content of a page. content is capped at 100 000 characters at the last complete tag; contentLength is the full length.",
     inputSchema: z.object({
-      account: z.string().optional(),
-      pageId: z.string(),
-      includeIds: z.boolean().optional()
+      account: accountSchema,
+      pageId: pageIdSchema,
+      includeIds: includeIdsSchema
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },

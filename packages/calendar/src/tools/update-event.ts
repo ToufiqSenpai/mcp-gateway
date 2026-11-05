@@ -2,28 +2,28 @@ import type { calendar_v3 } from "@googleapis/calendar"
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { toEvent } from "../map"
+import { toAttendeeEntry, toEvent } from "../map"
 import {
   accountSchema,
   attachmentSchema,
   attendeeSchema,
   availabilitySchema,
   dateTimeSchema,
+  guestPermissionsSchema,
   notificationLevelSchema,
   reminderSchema,
   sendUpdatesFor,
   visibilitySchema
 } from "../schemas"
+import type { GuestPermissions } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
-const guestPermissionsSchema = z.enum(["modify", "inviteOthers", "seeOtherInvites"])
-
-function permissionPatch(permissions: string[]): calendar_v3.Schema$Event {
-  return {
-    guestsCanModify: permissions.includes("modify"),
-    guestsCanInviteOthers: permissions.includes("inviteOthers"),
-    guestsCanSeeOtherGuests: permissions.includes("seeOtherInvites")
-  }
+function permissionPatch(permissions: GuestPermissions): calendar_v3.Schema$Event {
+  const patch: calendar_v3.Schema$Event = {}
+  if (permissions.guestsCanModify !== undefined) patch.guestsCanModify = permissions.guestsCanModify
+  if (permissions.guestsCanInviteOthers !== undefined) patch.guestsCanInviteOthers = permissions.guestsCanInviteOthers
+  if (permissions.guestsCanSeeGuests !== undefined) patch.guestsCanSeeOtherGuests = permissions.guestsCanSeeGuests
+  return patch
 }
 
 function asMillis(value: calendar_v3.Schema$EventDateTime | null | undefined): number | undefined {
@@ -35,28 +35,60 @@ function asMillis(value: calendar_v3.Schema$EventDateTime | null | undefined): n
 
 const inputSchema = z.object({
   account: accountSchema,
-  eventId: z.string(),
-  calendarId: z.string().optional(),
-  summary: z.string().optional(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-  startTime: dateTimeSchema.optional(),
-  endTime: dateTimeSchema.optional(),
-  allDay: z.boolean().optional(),
-  timeZone: z.string().optional(),
-  addedAttendees: z.array(attendeeSchema).optional(),
+  eventId: z.string().describe("Required. Event ID."),
+  calendarId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. ID of the calendar containing the event. Email address - can be resolved using list_calendars. Default: primary calendar."
+    ),
+  summary: z.string().optional().describe("Optional. New title."),
+  description: z.string().optional().describe("Optional. New description. Can contain HTML."),
+  location: z.string().optional().describe("Optional. New location."),
+  startTime: dateTimeSchema
+    .optional()
+    .describe("Optional. New start time (ISO 8601). Preserves duration if updating only start."),
+  endTime: dateTimeSchema.optional().describe("Optional. New end time (ISO 8601)."),
+  allDay: z
+    .boolean()
+    .optional()
+    .describe("Optional. Changes the event to all-day. If set, startTime and endTime must also be provided."),
+  timeZone: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. IANA Time Zone Database name (for example, America/Los_Angeles). Default: the user's primary time zone. Overrides offsets in startTime and endTime."
+    ),
+  addedAttendees: z.array(attendeeSchema).optional().describe("Optional. Attendees to add to the event."),
   addedAttendeeEmails: z.array(z.email()).optional().describe("Deprecated. Use addedAttendees."),
-  removedAttendeeEmails: z.array(z.email()).optional(),
-  addedAttachments: z.array(attachmentSchema).optional(),
-  removedAttachmentFileUrls: z.array(z.url()).optional(),
-  availability: availabilitySchema.optional(),
-  colorId: z.string().optional(),
-  guestPermissions: z.array(guestPermissionsSchema).optional(),
-  notificationLevel: notificationLevelSchema.optional(),
-  overrideReminders: z.array(reminderSchema).optional(),
-  visibility: visibilitySchema.optional(),
-  addGoogleMeetUrl: z.boolean().optional(),
-  googleMeetUrl: z.string().optional()
+  removedAttendeeEmails: z
+    .array(z.email())
+    .optional()
+    .describe("Optional. The attendees of the event to remove, as email addresses."),
+  addedAttachments: z.array(attachmentSchema).optional().describe("Optional. File attachments to add to the event."),
+  removedAttachmentFileUrls: z
+    .array(z.url())
+    .optional()
+    .describe("Optional. File attachments to remove from the event."),
+  availability: availabilitySchema.optional().describe("Optional. Whether the event blocks time on the calendar."),
+  colorId: z.string().optional().describe("Optional. New color of the event. An ID from the calendar color palette."),
+  guestPermissions: guestPermissionsSchema.optional().describe("Optional. Guest permission settings for this event."),
+  notificationLevel: notificationLevelSchema
+    .optional()
+    .describe("Optional. Email notification to send for this event update. Default: ALL."),
+  overrideReminders: z
+    .array(reminderSchema)
+    .optional()
+    .describe("Optional. If set, replaces all existing reminders for the event."),
+  visibility: visibilitySchema.optional().describe("Optional. New visibility of the event."),
+  addGoogleMeetUrl: z
+    .boolean()
+    .optional()
+    .describe("Optional. If true, creates or updates a Google Meet URL for the event. Ignored if Meet is disabled."),
+  googleMeetUrl: z
+    .string()
+    .optional()
+    .describe("Optional. Attach an existing Google Meet URL or meeting ID to the event. Overrides addGoogleMeetUrl.")
 })
 
 export const updateEventTool = defineTool(
@@ -64,7 +96,7 @@ export const updateEventTool = defineTool(
   {
     title: "Update event",
     description:
-      "Updates an event. Applies added*/removed* attendee and attachment deltas itself and preserves duration when only startTime is given. notificationLevel defaults to ALL.",
+      "Updates an event on the given calendar. Fields that are not set will not be updated. Applies added*/removed* attendee and attachment deltas itself and preserves duration when only startTime is given. notificationLevel defaults to ALL.",
     inputSchema,
     annotations: { idempotentHint: true, destructiveHint: false, openWorldHint: true }
   },
@@ -116,19 +148,13 @@ export const updateEventTool = defineTool(
       const merged = (current.attendees ?? []).filter(
         attendee => !attendee.email || !removed.has(attendee.email.toLowerCase())
       )
-      const added: { email?: string; optional?: boolean; displayName?: string }[] = [
-        ...(args.addedAttendees ?? []),
-        ...(args.addedAttendeeEmails ?? []).map(email => ({ email }))
-      ]
+      const added = [...(args.addedAttendees ?? []), ...(args.addedAttendeeEmails ?? []).map(email => ({ email }))]
       for (const attendee of added) {
         if (!attendee.email) continue
-        if (merged.some(existing => existing.email?.toLowerCase() === attendee.email?.toLowerCase())) {
+        if (merged.some(existing => existing.email?.toLowerCase() === attendee.email.toLowerCase())) {
           continue
         }
-        const entry: calendar_v3.Schema$EventAttendee = { email: attendee.email }
-        if (attendee.optional !== undefined) entry.optional = attendee.optional
-        if (attendee.displayName) entry.displayName = attendee.displayName
-        merged.push(entry)
+        merged.push(toAttendeeEntry({ ...attendee, email: attendee.email }))
       }
       patch.attendees = merged
     }

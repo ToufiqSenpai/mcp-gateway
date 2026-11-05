@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toPage } from "../map"
+import { accountSchema, contentSchema, sectionIdSchema, titleSchema } from "../schemas"
 import type { ToolContext } from "./tool-context"
 
 export const MAX_DOCUMENT_BYTES = 4_194_304
@@ -34,12 +35,12 @@ export const createPageTool = defineTool(
   {
     title: "Create page",
     description:
-      "Creates a page from an HTML fragment, wrapped in a full document. Over 4 MiB is refused with data.maxBytes 4194304.",
+      "Creates a new page in the specified section from an HTML fragment, wrapped in a full document. Over 4 MiB is refused with data.maxBytes 4194304.",
     inputSchema: z.object({
-      account: z.string().optional(),
-      sectionId: z.string(),
-      title: z.string(),
-      content: z.string()
+      account: accountSchema,
+      sectionId: sectionIdSchema,
+      title: titleSchema,
+      content: contentSchema
     }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },

@@ -8,7 +8,7 @@ Operator steps for a first deploy and for the routine repairs. Behaviour lives i
 - Cloudflare account with a zone for the chosen hostname (for example `gateway.example.com`).
 - Google Cloud project with the Calendar API enabled and an OAuth client (Web application).
 - Microsoft Entra app registration (tenant `common`) with a Web redirect URI.
-- Node 22+ and pnpm 12.16.
+- Node 26+ and pnpm 12.16.
 
 ## 2. Provision the Worker
 
@@ -79,8 +79,9 @@ pnpm db:migrate:remote    # D1
 pnpm deploy               # tailwind build, then wrangler deploy
 ```
 
-CI runs `typecheck`, `lint` and `test` on every push and PR; deploy is `workflow_dispatch`
-only. The workflow needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
+Pull requests run `format:check`, `lint`, `typecheck` and `test` as separate jobs. A push to
+`main` runs the deploy workflow (migrate + deploy); `workflow_dispatch` redeploys. The deploy
+job needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
 ## 7. First Accounts
 

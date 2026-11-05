@@ -28,8 +28,8 @@ function toCalendarRow(item: calendar_v3.Schema$CalendarListEntry): CalendarRow 
 
 const inputSchema = z.object({
   account: accountSchema,
-  pageSize: pageSizeSchema,
-  pageToken: pageTokenSchema
+  pageSize: pageSizeSchema.describe("Optional. Max results per page. Default 100, max 250."),
+  pageToken: pageTokenSchema.describe("Optional. Token specifying which result page to return.")
 })
 
 export const listCalendarsTool = defineTool(
@@ -37,7 +37,7 @@ export const listCalendarsTool = defineTool(
   {
     title: "List calendars",
     description:
-      "Lists the calendars visible to each usable Account. Returns id, summary, description and timeZone; pageToken is the gateway's opaque cursor.",
+      "Returns the calendars this user has access to (their calendar list). Use this tool to resolve calendar identifying data (for example, 'my family calendar') into its corresponding calendarId. Lists every usable Account when account is omitted.",
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },

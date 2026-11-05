@@ -7,15 +7,20 @@ import type { ToolContext } from "./tool-context"
 
 const inputSchema = z.object({
   account: accountSchema,
-  eventId: z.string(),
-  calendarId: z.string().optional()
+  eventId: z.string().describe("Required. Event ID."),
+  calendarId: z
+    .string()
+    .optional()
+    .describe(
+      "Optional. ID of the calendar containing the event. Email address - can be resolved using list_calendars. Default: primary calendar."
+    )
 })
 
 export const getEventTool = defineTool(
   "get_event",
   {
     title: "Get event",
-    description: "Returns one event from a calendar, defaulting to the primary calendar.",
+    description: "Returns a single event on the given calendar.",
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
