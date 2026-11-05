@@ -1,8 +1,8 @@
-import { ToolResult, collectAcrossAccounts } from "@mcp-gateway/common"
+import { ToolResult, collectAcrossAccounts, defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { toNotebook, toPage, toSection } from "../map"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 interface NotebookListData {
   notebooks: ReturnType<typeof toNotebook>[]
@@ -37,7 +37,7 @@ export const listNotebooksTool = defineTool(
     inputSchema: z.object({ account: accountSchema, cursor: cursorSchema }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const accounts = await context.selectedAccounts(args.account)
     const page = await context.paginate<ReturnType<typeof toNotebook>>({
       accounts,
@@ -69,7 +69,7 @@ export const listSectionsTool = defineTool(
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     if (args.notebookId && args.sectionGroupId) {
       throw new Error("Pass only one of notebookId or sectionGroupId, not both.")
     }
@@ -105,7 +105,7 @@ export const listPagesTool = defineTool(
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const accounts = await context.selectedAccounts(args.account)
 
     const page = await context.paginate<ReturnType<typeof toPage>>({

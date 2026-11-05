@@ -1,4 +1,5 @@
 import type { calendar_v3 } from "@googleapis/calendar"
+import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { toEvent } from "../map"
@@ -13,7 +14,7 @@ import {
   sendUpdatesFor,
   visibilitySchema
 } from "../schemas"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 const guestPermissionsSchema = z.enum(["modify", "inviteOthers", "seeOtherInvites"])
 
@@ -67,7 +68,7 @@ export const updateEventTool = defineTool(
     inputSchema,
     annotations: { idempotentHint: true, destructiveHint: false, openWorldHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.calendar(slug)
     const calendarId = args.calendarId ?? "primary"

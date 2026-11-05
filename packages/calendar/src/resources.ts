@@ -1,16 +1,9 @@
 import type { calendar_v3 } from "@googleapis/calendar"
-import { collectAcrossAccounts, type ResourceListing } from "@mcp-gateway/common"
-import {
-  McpServer,
-  ProtocolError,
-  ProtocolErrorCode,
-  ResourceNotFoundError,
-  ResourceTemplate
-} from "@modelcontextprotocol/server"
+import { AccountResourceRegistry, collectPages, type ResourceItem } from "@mcp-gateway/common"
+import { ProtocolError, ProtocolErrorCode, ResourceNotFoundError } from "@modelcontextprotocol/server"
 
 import { GoogleApiError } from "./client"
 import { toEvent } from "./map"
-import { collectPages } from "./tools/helpers"
 import type { ToolContext } from "./tools/tool-context"
 
 const URI_PATTERN = /^calendar:\/\/([^/]+)\/calendars\/(.+)$/
@@ -46,43 +39,33 @@ function parseUri(uri: string): ParsedCalendarUri {
   return { account: match[1], calendarId: decodeCalendarId(match[2]) }
 }
 
-type ResourceItem = ResourceListing["resources"][number]
+/** One resource per Calendar per usable Account; a sick Account is skipped and named. */
+export class CalendarResourceRegistry extends AccountResourceRegistry<ToolContext> {
+  protected readonly templateUri = "calendar://{account}/calendars/{calendarId}"
+  protected readonly resourceName = "calendar"
+  protected readonly resourceTitle = "Calendar"
 
-/**
- * One resource per Calendar per usable Account. A sick Account is skipped, never faked: the
- * listing stays complete for healthy Accounts and says which slugs were skipped.
- */
-export class CalendarResourceRegistry {
-  public constructor(private readonly context: ToolContext) {}
-
-  public async list(): Promise<ResourceListing> {
-    const accounts = await this.context.listAccounts()
-    const listing = await collectAcrossAccounts<ResourceItem>(accounts, async slug => {
-      const result = await this.context.enumeration<ResourceItem>(slug, async () => {
-        const client = this.context.calendar(slug)
-        return collectPages(async pageToken => {
-          const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }
-          if (pageToken) params.pageToken = pageToken
-          const response = await client.calendarList.list(params)
-          return {
-            items: (response.data.items ?? []).flatMap(calendar =>
-              calendar.id
-                ? [
-                    {
-                      uri: calendarUri(slug, calendar.id),
-                      name: calendar.summary ?? calendar.id,
-                      mimeType: "application/json"
-                    }
-                  ]
-                : []
-            ),
-            nextPageToken: response.data.nextPageToken
-          }
-        })
-      })
-      return { items: result.items, truncated: result.truncated }
+  protected async enumerate(slug: string): Promise<{ items: ResourceItem[]; truncated: boolean }> {
+    const client = this.context.calendar(slug)
+    return collectPages(async pageToken => {
+      const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }
+      if (pageToken) params.pageToken = pageToken
+      const response = await client.calendarList.list(params)
+      return {
+        items: (response.data.items ?? []).flatMap(calendar =>
+          calendar.id
+            ? [
+                {
+                  uri: calendarUri(slug, calendar.id),
+                  name: calendar.summary ?? calendar.id,
+                  mimeType: "application/json"
+                }
+              ]
+            : []
+        ),
+        nextPageToken: response.data.nextPageToken
+      }
     })
-    return { resources: listing.items, skipped: listing.skipped, truncated: listing.truncated }
   }
 
   public async read(uri: string) {
@@ -131,13 +114,5 @@ export class CalendarResourceRegistry {
         }
       ]
     }
-  }
-
-  public register(server: McpServer): void {
-    const template = new ResourceTemplate("calendar://{account}/calendars/{calendarId}", { list: undefined })
-
-    server.registerResource("calendar", template, { title: "Calendar", mimeType: "application/json" }, async uri =>
-      this.read(uri.href)
-    )
   }
 }

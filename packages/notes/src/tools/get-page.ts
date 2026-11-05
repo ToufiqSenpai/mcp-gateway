@@ -1,8 +1,9 @@
+import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toPage } from "../map"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 export const CONTENT_CAP = 100_000
 
@@ -32,7 +33,7 @@ export const getPageTool = defineTool(
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.graph(slug)
 

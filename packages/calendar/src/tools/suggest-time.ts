@@ -1,7 +1,8 @@
+import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { accountSchema, dateTimeSchema } from "../schemas"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 interface Interval {
   start: number
@@ -79,7 +80,7 @@ export const suggestTimeTool = defineTool(
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.calendar(slug)
     const timeZone = args.timeZone ?? "UTC"

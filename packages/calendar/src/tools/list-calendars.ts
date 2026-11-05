@@ -1,9 +1,9 @@
 import type { calendar_v3 } from "@googleapis/calendar"
-import { ToolResult, collectAcrossAccounts } from "@mcp-gateway/common"
+import { ToolResult, collectAcrossAccounts, collectPages, defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { accountSchema, pageSizeSchema, pageTokenSchema } from "../schemas"
-import { collectPages, defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 interface CalendarRow {
   id?: string
@@ -41,7 +41,7 @@ export const listCalendarsTool = defineTool(
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const selected = await context.selectedAccounts(args.account)
 
     const page = await context.paginate<CalendarRow>({

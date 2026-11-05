@@ -1,8 +1,9 @@
+import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { GraphError } from "../client"
 import { toPage } from "../map"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 export const MAX_DOCUMENT_BYTES = 4_194_304
 
@@ -42,7 +43,7 @@ export const createPageTool = defineTool(
     }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.graph(slug)
     const document = wrapDocument(args.title, args.content)

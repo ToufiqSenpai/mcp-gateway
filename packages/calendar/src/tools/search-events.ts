@@ -1,10 +1,10 @@
 import type { calendar_v3 } from "@googleapis/calendar"
-import { ToolResult } from "@mcp-gateway/common"
+import { ToolResult, collectPages, defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { toEvent, type CalendarEvent } from "../map"
 import { accountSchema, pageSizeSchema, pageTokenSchema } from "../schemas"
-import { collectPages, defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 const inputSchema = z.object({
   account: accountSchema,
@@ -27,7 +27,7 @@ export const searchEventsTool = defineTool(
     inputSchema,
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.calendar(slug)
     const accounts = await context.listAccounts()

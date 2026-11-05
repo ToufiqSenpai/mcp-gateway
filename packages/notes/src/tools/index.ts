@@ -6,7 +6,9 @@ import { listNotebooksTool, listPagesTool, listSectionsTool } from "./lists"
 import { searchPagesTool } from "./search-pages"
 import type { ToolContext } from "./tool-context"
 import { updatePageTool } from "./update-page"
-import { createNotebookTool, createSectionTool, deletePageTool } from "./writes"
+import { createNotebookTool } from "./writes/create-notebook"
+import { createSectionTool } from "./writes/create-section"
+import { deletePageTool } from "./writes/delete-page"
 
 export type NotesTool = ToolDefinition<ToolContext>
 

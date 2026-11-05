@@ -1,6 +1,7 @@
+import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 const commandSchema = z.object({
   target: z.string().min(1).describe("#<data-id>, body, or title"),
@@ -37,7 +38,7 @@ export const updatePageTool = defineTool(
     }),
     annotations: { destructiveHint: false, idempotentHint: false }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     validateCommands(args.commands)
     const slug = await context.resolve(args.account)
 

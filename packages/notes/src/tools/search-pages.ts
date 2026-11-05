@@ -1,8 +1,8 @@
-import { ToolResult } from "@mcp-gateway/common"
+import { ToolResult, defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
 import { toPage } from "../map"
-import { defineTool } from "./helpers"
+import type { ToolContext } from "./tool-context"
 
 interface PageSearchData {
   pages: ReturnType<typeof toPage>[]
@@ -22,7 +22,7 @@ export const searchPagesTool = defineTool(
     }),
     annotations: { readOnlyHint: true, idempotentHint: true }
   },
-  async (args, context) => {
+  async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const collected = await context.graph(slug).pages(args.sectionId)
     const needle = args.query.toLowerCase()

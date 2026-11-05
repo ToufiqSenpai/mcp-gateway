@@ -103,3 +103,24 @@ export async function paginate<T>(options: {
 
   return { items: page, nextOffsetToken, truncated, skipped }
 }
+
+/** How many Provider items one tool call gathers before reporting `truncated`. */
+export const FETCH_CAP = 1000
+
+/** Follows Provider pagination to the cap; Provider tokens stay inside this function. */
+export async function collectPages<T>(
+  fetchPage: (pageToken?: string) => Promise<{ items: T[]; nextPageToken?: string | null }>,
+  cap = FETCH_CAP
+): Promise<{ items: T[]; truncated: boolean }> {
+  const items: T[] = []
+  let pageToken: string | undefined
+
+  do {
+    const page = await fetchPage(pageToken)
+    items.push(...page.items)
+    pageToken = page.nextPageToken ?? undefined
+    if (!pageToken) return { items, truncated: false }
+  } while (items.length < cap)
+
+  return { items: items.slice(0, cap), truncated: true }
+}
