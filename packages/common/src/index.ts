@@ -1,4 +1,5 @@
 export type { CursorCodec, CursorPayload, McpContext } from "./context"
+export { definePrompt, PromptContext, PromptRegistry, type PromptDefinition } from "./prompts"
 export { AccountResourceRegistry, type ResourceItem, type ResourceListing, type ResourceSource } from "./resources"
 export { McpServerBuilder } from "./server"
 export { listAccountsTool } from "./tools/list-accounts"

@@ -1,8 +1,8 @@
-import { McpServerBuilder, type McpContext } from "@mcp-gateway/common"
+import { McpServerBuilder, PromptContext, PromptRegistry, type McpContext } from "@mcp-gateway/common"
 import type { McpServer } from "@modelcontextprotocol/server"
 
 import { providerErrorCode } from "./client"
-import { CalendarPromptRegistry, PromptContext } from "./prompts"
+import { calendarPrompts } from "./prompts"
 import { CalendarResourceRegistry } from "./resources"
 import { calendarTools } from "./tools"
 import { ToolContext } from "./tools/tool-context"
@@ -27,6 +27,6 @@ export class CalendarServer extends McpServerBuilder<ToolContext> {
   }
 
   protected override registerPrompts(server: McpServer): void {
-    new CalendarPromptRegistry().register(server, new PromptContext(this.mcp))
+    new PromptRegistry(calendarPrompts).register(server, new PromptContext(this.mcp))
   }
 }
