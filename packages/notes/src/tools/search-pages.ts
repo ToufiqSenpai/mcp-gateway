@@ -32,7 +32,7 @@ export const searchPagesTool = defineTool(
     const page = await context.paginate<ReturnType<typeof toPage>>({
       accounts: [{ slug }],
       cursor: args.cursor,
-      fetchAll: async () => ({ items: matches, truncated: collected.truncated })
+      fetchAll: () => Promise.resolve({ items: matches, truncated: collected.truncated })
     })
 
     const data: PageSearchData = { pages: page.items }

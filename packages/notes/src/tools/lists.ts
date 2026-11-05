@@ -33,7 +33,7 @@ export const listNotebooksTool = defineTool(
     const page = await context.paginate<ReturnType<typeof toNotebook>>({
       accounts,
       cursor: args.cursor,
-      fetchAll: async () =>
+      fetchAll: () =>
         collectAcrossAccounts(accounts, async slug => {
           const result = await context.graph(slug).notebooks()
           return { items: result.items.map(toNotebook), truncated: result.truncated }
@@ -69,7 +69,7 @@ export const listSectionsTool = defineTool(
     const page = await context.paginate<ReturnType<typeof toSection>>({
       accounts,
       cursor: args.cursor,
-      fetchAll: async () =>
+      fetchAll: () =>
         collectAcrossAccounts(accounts, async slug => {
           const result = await context
             .graph(slug)
@@ -103,7 +103,7 @@ export const listPagesTool = defineTool(
     const page = await context.paginate<ReturnType<typeof toPage>>({
       accounts,
       cursor: args.cursor,
-      fetchAll: async () =>
+      fetchAll: () =>
         collectAcrossAccounts(accounts, async slug => {
           const result = await context.graph(slug).pages(args.sectionId)
           return { items: result.items.map(toPage), truncated: result.truncated }

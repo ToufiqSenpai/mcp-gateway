@@ -151,11 +151,15 @@ export class GraphClient {
       top: GRAPH_PAGE_SIZE
     }
 
-    const load = notebookId
-      ? () => this.client.me.onenote.notebooks.byNotebookId(notebookId).sections.get({ queryParameters })
-      : sectionGroupId
-        ? () => this.client.me.onenote.sectionGroups.bySectionGroupId(sectionGroupId).sections.get({ queryParameters })
-        : () => this.client.me.onenote.sections.get({ queryParameters })
+    let load
+    if (notebookId) {
+      load = () => this.client.me.onenote.notebooks.byNotebookId(notebookId).sections.get({ queryParameters })
+    } else if (sectionGroupId) {
+      load = () =>
+        this.client.me.onenote.sectionGroups.bySectionGroupId(sectionGroupId).sections.get({ queryParameters })
+    } else {
+      load = () => this.client.me.onenote.sections.get({ queryParameters })
+    }
 
     return this.collect(load, createOnenoteSectionCollectionResponseFromDiscriminatorValue)
   }
