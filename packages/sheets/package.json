@@ -12,6 +12,10 @@
   },
   "dependencies": {
     "@mcp-gateway/common": "workspace:*",
+    "@mcp-gateway/google-api": "workspace:*",
     "@googleapis/sheets": "18.1.2"
+  },
+  "devDependencies": {
+    "@mcp-gateway/test-support": "workspace:*"
   }
 }

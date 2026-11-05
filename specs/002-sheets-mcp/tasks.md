@@ -219,3 +219,10 @@ Task: "Implement update_formulas in packages/sheets/src/tools/update-formulas.ts
 - `packages/sheets/src/tools/index.ts` and the web integration file are the only shared writes; serialize them
 - Never hand-edit the generated migration; regenerate with `pnpm db:generate`
 - The `status: "SUCCESS"` literal and the pass-through `commentsIncluded` are deliberate; do not invent provider codes or client-side comment handling
+
+---
+
+## Phase 8: Convergence
+
+- [ ] T046 Exempt the shared `list_accounts` tool from the "every tool accepts `account`" rule in `specs/002-sheets-mcp/spec.md` (FR-003 and the Tool Contract table) and the matching sentence in `specs/002-sheets-mcp/contracts/mcp-sheets.md`, so the stated rule matches the eight-tool behaviour per FR-003 (contradicts)
+- [ ] T047 Record the guarded `resources/list` handlers in `packages/common/src/server.ts` under `specs/002-sheets-mcp/plan.md` Complexity Tracking, since the plan states `packages/common` is untouched; keep the guard and the existing comment per plan: Structure Decision (contradicts)

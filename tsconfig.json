@@ -2,6 +2,8 @@
   "files": [],
   "references": [
     { "path": "packages/common" },
+    { "path": "packages/google-api" },
+    { "path": "packages/test-support" },
     { "path": "packages/calendar" },
     { "path": "packages/notes" },
     { "path": "packages/sheets" },

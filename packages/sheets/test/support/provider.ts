@@ -28,7 +28,12 @@ export function serve(handler: (request: Request) => Response | Promise<Response
     return handler(request)
   }
 
-  return { seen, restore: () => void (globalThis.fetch = original) }
+  return {
+    seen,
+    restore: () => {
+      globalThis.fetch = original
+    }
+  }
 }
 
 /** The single request a deterministic tool call must have made. */
