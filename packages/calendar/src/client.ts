@@ -1,7 +1,7 @@
 import type { calendar_v3 } from "@googleapis/calendar"
 import { Google } from "@mcp-gateway/google"
 
-export { GOOGLE_ROOT_URL, GoogleApiError, providerErrorCode } from "@mcp-gateway/google"
+export { GOOGLE_ROOT_URL, GoogleApiError, googleStatus } from "@mcp-gateway/google"
 
 function pathSegment(value: string | undefined): string {
   return encodeURIComponent(value ?? "")

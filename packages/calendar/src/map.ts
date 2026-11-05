@@ -1,6 +1,6 @@
 import type { calendar_v3 } from "@googleapis/calendar"
 
-import type { GuestPermissions, WorkingLocationProperties } from "./schemas"
+import type { AttendeeInput, GuestPermissions, WorkingLocationProperties } from "./schemas"
 
 /** A tool-surface attendee; REST-only members never leave this package. */
 export interface CalendarAttendee {
@@ -131,6 +131,16 @@ export function toWorkingLocationPropertiesInput(
   return { type: "homeOffice" }
 }
 
+/** The three guest fields shared by create and update, including the REST rename. */
+export function toGuestPermissionsInput(permissions: GuestPermissions | undefined): calendar_v3.Schema$Event {
+  const body: calendar_v3.Schema$Event = {}
+  if (!permissions) return body
+  if (permissions.guestsCanModify !== undefined) body.guestsCanModify = permissions.guestsCanModify
+  if (permissions.guestsCanInviteOthers !== undefined) body.guestsCanInviteOthers = permissions.guestsCanInviteOthers
+  if (permissions.guestsCanSeeGuests !== undefined) body.guestsCanSeeOtherGuests = permissions.guestsCanSeeGuests
+  return body
+}
+
 function toAttachment(raw: calendar_v3.Schema$EventAttachment): CalendarAttachment {
   const attachment: CalendarAttachment = {}
   if (raw.fileUrl) attachment.fileUrl = raw.fileUrl
@@ -224,15 +234,7 @@ function videoEntryPoint(raw: calendar_v3.Schema$Event): string | undefined {
   )
 }
 
-export function toAttendeeEntry(attendee: {
-  email: string
-  optionalAttendee?: boolean
-  resource?: boolean
-  displayName?: string
-  responseStatus?: string
-  comment?: string
-  additionalGuests?: number
-}): calendar_v3.Schema$EventAttendee {
+export function toAttendeeEntry(attendee: AttendeeInput): calendar_v3.Schema$EventAttendee {
   const entry: calendar_v3.Schema$EventAttendee = { email: attendee.email }
   if (attendee.optionalAttendee !== undefined) entry.optional = attendee.optionalAttendee
   if (attendee.resource !== undefined) entry.resource = attendee.resource
@@ -242,24 +244,7 @@ export function toAttendeeEntry(attendee: {
   return entry
 }
 
-export function toAttendeeList(
-  attendees:
-    | {
-        email?: string
-        optionalAttendee?: boolean
-        resource?: boolean
-        displayName?: string
-        responseStatus?: string
-        comment?: string
-        additionalGuests?: number
-      }[]
-    | undefined
-): calendar_v3.Schema$EventAttendee[] | undefined {
+export function toAttendeeList(attendees: AttendeeInput[] | undefined): calendar_v3.Schema$EventAttendee[] | undefined {
   if (!attendees?.length) return undefined
-  const result: calendar_v3.Schema$EventAttendee[] = []
-  for (const attendee of attendees) {
-    if (!attendee.email) continue
-    result.push(toAttendeeEntry({ ...attendee, email: attendee.email }))
-  }
-  return result
+  return attendees.map(toAttendeeEntry)
 }

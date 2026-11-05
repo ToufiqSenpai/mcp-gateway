@@ -1,9 +1,9 @@
+import { stubContext } from "@mcp-gateway/test"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { valueRowsSchema } from "../../src/schemas"
 import { ToolContext } from "../../src/tools/tool-context"
 import { updateValuesTool } from "../../src/tools/update-values"
-import { stubContext } from "../support/mcp"
 import { json, onlyRequest, serve } from "../support/provider"
 
 const UPDATE_RESPONSE = {

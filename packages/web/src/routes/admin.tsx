@@ -55,11 +55,13 @@ async function revokeAccount(env: AppEnv["Bindings"], account: Account): Promise
 
 export const adminRoutes = new Hono<AppEnv>()
 
-/** Every admin form POST shares one origin+CSRF check and one parsed form. */
+/** Every admin MCP route validates the slug; every form POST also shares one origin+CSRF check. */
 adminRoutes.use("/mcps/:mcp/*", async (c, next) => {
-  if (c.req.method !== "POST") return next()
   const mcp = c.req.param("mcp")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
+  c.set("mcp", mcp)
+
+  if (c.req.method !== "POST") return next()
 
   const form = textFields(await c.req.parseBody())
   if (!isSameOrigin(c.req.raw) || !isCsrfValid(c, form["_csrf"])) return c.text("Forbidden", 403)
@@ -85,8 +87,7 @@ adminRoutes.get("/", async c => {
 })
 
 adminRoutes.get("/mcps/:mcp", async c => {
-  const mcp = c.req.param("mcp")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
+  const mcp = c.get("mcp")
 
   const accounts = await new AccountRepository(c.env).listByMcp(mcp)
   const csrf = ensureCsrfToken(c)
@@ -111,8 +112,7 @@ adminRoutes.get("/mcps/:mcp", async c => {
 })
 
 adminRoutes.post("/mcps/:mcp/accounts", async c => {
-  const mcp = c.req.param("mcp")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
+  const mcp = c.get("mcp")
 
   const form = c.get("form")
   const slug = AccountSlug.safeParse(form["slug"] ?? "")
@@ -136,9 +136,8 @@ adminRoutes.post("/mcps/:mcp/accounts", async c => {
 })
 
 adminRoutes.post("/mcps/:mcp/accounts/:slug/reauth", async c => {
-  const mcp = c.req.param("mcp")
+  const mcp = c.get("mcp")
   const slug = c.req.param("slug")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
   const account = await new AccountRepository(c.env).findBySlug(mcp, slug)
   if (!account) return c.text("Not found", 404)
@@ -162,9 +161,8 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/reauth", async c => {
 })
 
 adminRoutes.post("/mcps/:mcp/accounts/:slug/default", async c => {
-  const mcp = c.req.param("mcp")
+  const mcp = c.get("mcp")
   const slug = c.req.param("slug")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
   const repository = new AccountRepository(c.env)
   const account = await repository.findBySlug(mcp, slug)
@@ -176,9 +174,8 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/default", async c => {
 })
 
 adminRoutes.get("/mcps/:mcp/accounts/:slug/revoke", async c => {
-  const mcp = c.req.param("mcp")
+  const mcp = c.get("mcp")
   const slug = c.req.param("slug")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
   const account = await new AccountRepository(c.env).findBySlug(mcp, slug)
   if (!account) return c.text("Not found", 404)
@@ -189,9 +186,8 @@ adminRoutes.get("/mcps/:mcp/accounts/:slug/revoke", async c => {
 })
 
 adminRoutes.post("/mcps/:mcp/accounts/:slug/revoke", async c => {
-  const mcp = c.req.param("mcp")
+  const mcp = c.get("mcp")
   const slug = c.req.param("slug")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
   const repository = new AccountRepository(c.env)
   const account = await repository.findBySlug(mcp, slug)
@@ -211,8 +207,7 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/revoke", async c => {
 })
 
 adminRoutes.get("/mcps/:mcp/test", async c => {
-  const mcp = c.req.param("mcp")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
+  const mcp = c.get("mcp")
 
   const [tools, accounts] = await Promise.all([
     new InProcessRunner(c.env).listTools(mcp),
@@ -231,8 +226,7 @@ adminRoutes.get("/mcps/:mcp/test", async c => {
 })
 
 adminRoutes.post("/mcps/:mcp/test", async c => {
-  const mcp = c.req.param("mcp")
-  if (!isMcpSlug(mcp)) return c.text("Not found", 404)
+  const mcp = c.get("mcp")
 
   const form = c.get("form")
   const tool = form["tool"] ?? ""

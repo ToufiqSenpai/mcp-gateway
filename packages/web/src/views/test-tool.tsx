@@ -3,7 +3,7 @@ import { Layout } from "./layout"
 
 export interface TestToolProps {
   mcp: string
-  tools: { name: string; title?: string; description?: string }[]
+  tools: { name: string; title?: string; description?: string; annotations?: { readOnlyHint?: boolean } }[]
   accounts: Account[]
   csrf: string
   devBypass: boolean
@@ -15,18 +15,6 @@ export interface TestToolProps {
   }
   error?: string
 }
-
-const WRITE_TOOLS = new Set([
-  "create_event",
-  "update_event",
-  "delete_event",
-  "respond_to_event",
-  "create_page",
-  "update_page",
-  "delete_page",
-  "create_section",
-  "create_notebook"
-])
 
 export function TestToolPage({ mcp, tools, accounts, csrf, devBypass, result, error }: TestToolProps) {
   const defaultAccount = accounts.find(account => account.isDefault === 1)?.slug
@@ -54,7 +42,7 @@ export function TestToolPage({ mcp, tools, accounts, csrf, devBypass, result, er
             {tools.map(tool => (
               <option key={tool.name} value={tool.name}>
                 {tool.name}
-                {WRITE_TOOLS.has(tool.name) ? " (write)" : ""}
+                {tool.annotations?.readOnlyHint === false ? " (write)" : ""}
               </option>
             ))}
           </select>

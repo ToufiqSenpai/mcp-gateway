@@ -2,7 +2,7 @@ import type { calendar_v3 } from "@googleapis/calendar"
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { toAttendeeList, toEvent, toWorkingLocationPropertiesInput } from "../map"
+import { toAttendeeList, toEvent, toGuestPermissionsInput, toWorkingLocationPropertiesInput } from "../map"
 import {
   accountSchema,
   attachmentSchema,
@@ -18,18 +18,8 @@ import {
   visibilitySchema,
   workingLocationPropertiesSchema
 } from "../schemas"
-import type { GuestPermissions } from "../schemas"
 import { meetConferenceData } from "./meet"
 import type { ToolContext } from "./tool-context"
-
-function permissionsToBody(permissions: GuestPermissions | undefined): calendar_v3.Schema$Event {
-  const body: calendar_v3.Schema$Event = {}
-  if (!permissions) return body
-  if (permissions.guestsCanModify !== undefined) body.guestsCanModify = permissions.guestsCanModify
-  if (permissions.guestsCanInviteOthers !== undefined) body.guestsCanInviteOthers = permissions.guestsCanInviteOthers
-  if (permissions.guestsCanSeeGuests !== undefined) body.guestsCanSeeOtherGuests = permissions.guestsCanSeeGuests
-  return body
-}
 
 const inputSchema = z.object({
   account: accountSchema,
@@ -125,7 +115,7 @@ function eventBody(
   }
   if (args.availability === "AVAILABILITY_FREE") body.transparency = "transparent"
   if (args.availability === "AVAILABILITY_BUSY") body.transparency = "opaque"
-  Object.assign(body, permissionsToBody(args.guestPermissions))
+  Object.assign(body, toGuestPermissionsInput(args.guestPermissions))
   if (conferenceData) body.conferenceData = conferenceData
   return body
 }
@@ -137,7 +127,7 @@ export const createEventTool = defineTool(
     description:
       "Creates an event on the given calendar. notificationLevel defaults to ALL, which emails guests; REST defaults to sending nothing.",
     inputSchema,
-    annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true }
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)

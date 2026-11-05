@@ -1,11 +1,11 @@
 import { listAccountsTool } from "@mcp-gateway/common"
+import { listTools as readTools, stubContext } from "@mcp-gateway/test"
 import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { REQUIRED_SCOPES } from "../../src"
 import { SheetsServer } from "../../src/server"
 import reference from "../fixtures/google-sheets-tools.json" with { type: "json" }
-import { listTools as readTools, stubContext } from "../support/mcp"
 
 interface PropertySchema {
   type?: string | string[]

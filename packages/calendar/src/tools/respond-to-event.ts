@@ -28,7 +28,7 @@ export const respondToEventTool = defineTool(
     title: "Respond to event",
     description: "Responds to an event on a calendar. notificationLevel defaults to ALL.",
     inputSchema,
-    annotations: { idempotentHint: true, destructiveHint: false }
+    annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false }
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)

@@ -25,11 +25,7 @@ export const dateOrDateTimeSchema = z
   })
   .describe("A date or a date-time, with an optional timezone name.")
 
-export const accountSchema = z
-  .string()
-  .min(1)
-  .optional()
-  .describe("Account slug. Defaults to the Default Account for this MCP.")
+export { accountSchema } from "@mcp-gateway/common"
 
 export const pageSizeSchema = z
   .number()
@@ -56,6 +52,8 @@ export const attendeeSchema = z.object({
   comment: z.string().optional().describe("Optional. Response comment."),
   additionalGuests: z.number().int().optional().describe("Optional. Number of additional guests. Default: 0.")
 })
+
+export type AttendeeInput = z.infer<typeof attendeeSchema>
 
 export const attachmentSchema = z.object({
   fileUrl: z.url().describe("Required. URL link to the attachment."),

@@ -434,9 +434,7 @@ export function installFetchRouter(accessJwks: () => Promise<JsonWebKey[]>): voi
       return json(200, { keys: await accessJwks() })
     }
 
-    const mocked = await route(request)
-    if (mocked.status !== 599) return mocked
     // Unmocked origins fail loudly instead of reaching the network.
-    return mocked
+    return route(request)
   }
 }

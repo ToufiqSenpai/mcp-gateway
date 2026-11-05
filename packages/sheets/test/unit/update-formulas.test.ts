@@ -1,8 +1,8 @@
+import { stubContext } from "@mcp-gateway/test"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { ToolContext } from "../../src/tools/tool-context"
 import { updateFormulasTool } from "../../src/tools/update-formulas"
-import { stubContext } from "../support/mcp"
 import { json, onlyRequest, serve } from "../support/provider"
 
 const UPDATE_RESPONSE = {

@@ -10,7 +10,7 @@ export const deletePageTool = defineTool(
     title: "Delete page",
     description: "Deletes a page. Graph exposes no undo or trash step.",
     inputSchema: z.object({ account: accountSchema, pageId: pageIdSchema }),
-    annotations: { destructiveHint: true, idempotentHint: true }
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true }
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)

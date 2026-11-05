@@ -1,7 +1,7 @@
 import type { sheets_v4 } from "@googleapis/sheets"
 import { Google } from "@mcp-gateway/google"
 
-export { GOOGLE_ROOT_URL, GoogleApiError, providerErrorCode } from "@mcp-gateway/google"
+export { GOOGLE_ROOT_URL, GoogleApiError, googleStatus } from "@mcp-gateway/google"
 
 function pathSegment(value: string): string {
   return encodeURIComponent(value)

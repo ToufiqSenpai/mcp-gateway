@@ -1,8 +1,8 @@
+import { stubContext } from "@mcp-gateway/test"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { createSpreadsheetTool } from "../../src/tools/create-spreadsheet"
 import { ToolContext } from "../../src/tools/tool-context"
-import { stubContext } from "../support/mcp"
 import { json, onlyRequest, serve } from "../support/provider"
 
 const SPREADSHEET = {

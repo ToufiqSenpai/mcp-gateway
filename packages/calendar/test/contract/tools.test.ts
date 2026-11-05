@@ -1,8 +1,8 @@
+import { listTools as readTools, stubContext, withClient } from "@mcp-gateway/test"
 import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { CalendarServer } from "../../src/server"
-import { listTools as readTools, stubContext, withClient } from "../support/mcp"
 
 interface PropertySchema {
   type?: string
@@ -111,11 +111,14 @@ describe("calendar tool contract", () => {
     expect(preferences?.properties?.["pageSize"]).toBeDefined()
   })
 
-  it("marks delete_event destructive and the read tools read-only", async () => {
+  it("marks delete_event destructive and the write tools non-read-only", async () => {
     const tools = await listTools()
     expect(tool(tools, "delete_event").annotations?.["destructiveHint"]).toBe(true)
     expect(tool(tools, "list_events").annotations?.["readOnlyHint"]).toBe(true)
     expect(tool(tools, "list_calendars").annotations?.["readOnlyHint"]).toBe(true)
+    for (const name of ["create_event", "update_event", "delete_event", "respond_to_event"]) {
+      expect(tool(tools, name).annotations?.["readOnlyHint"]).toBe(false)
+    }
   })
 
   it("answers an unknown tool with -32602", async () => {

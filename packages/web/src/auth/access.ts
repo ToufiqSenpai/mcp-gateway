@@ -73,17 +73,8 @@ export class AccessVerifier {
     return set
   }
 
-  /**
-   * The local bypass needs both halves: `ENVIRONMENT=development` and a localhost host. The
-   * production test asserts the first half is unreachable when the environment is anything else.
-   */
-  public static isDevBypass(env: Pick<Env, "ENVIRONMENT">, url: string | URL): boolean {
-    if (env.ENVIRONMENT !== "development") return false
-    return isLocalHost(new URL(url).hostname)
-  }
-
   public async verify(request: Request, group: RouteGroup): Promise<AccessIdentity> {
-    if (AccessVerifier.isDevBypass(this.env, request.url)) {
+    if (isDevBypass(this.env, request.url)) {
       return {
         kind: "human",
         subject: "00000000-0000-0000-0000-000000000000",
@@ -121,8 +112,13 @@ export class AccessVerifier {
   }
 }
 
+/**
+ * The local bypass needs both halves: `ENVIRONMENT=development` and a localhost host. The
+ * production test asserts the first half is unreachable when the environment is anything else.
+ */
 export function isDevBypass(env: Pick<Env, "ENVIRONMENT">, url: string | URL): boolean {
-  return AccessVerifier.isDevBypass(env, url)
+  if (env.ENVIRONMENT !== "development") return false
+  return isLocalHost(new URL(url).hostname)
 }
 
 export function verifyAccess(request: Request, env: Env, group: RouteGroup): Promise<AccessIdentity> {

@@ -1,8 +1,8 @@
 import type { McpContext } from "@mcp-gateway/common"
+import { getPrompt, listPrompts as readPrompts, stubContext } from "@mcp-gateway/test"
 import { describe, expect, it } from "vitest"
 
 import { CalendarServer } from "../../src/server"
-import { getPrompt, listPrompts as readPrompts, stubContext } from "../support/mcp"
 
 const noProviderContext: McpContext = {
   ...stubContext,

@@ -2,7 +2,7 @@ import type { calendar_v3 } from "@googleapis/calendar"
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { toAttendeeEntry, toEvent } from "../map"
+import { toAttendeeEntry, toEvent, toGuestPermissionsInput } from "../map"
 import {
   accountSchema,
   attachmentSchema,
@@ -15,17 +15,8 @@ import {
   sendUpdatesFor,
   visibilitySchema
 } from "../schemas"
-import type { GuestPermissions } from "../schemas"
 import { meetConferenceData } from "./meet"
 import type { ToolContext } from "./tool-context"
-
-function permissionPatch(permissions: GuestPermissions): calendar_v3.Schema$Event {
-  const patch: calendar_v3.Schema$Event = {}
-  if (permissions.guestsCanModify !== undefined) patch.guestsCanModify = permissions.guestsCanModify
-  if (permissions.guestsCanInviteOthers !== undefined) patch.guestsCanInviteOthers = permissions.guestsCanInviteOthers
-  if (permissions.guestsCanSeeGuests !== undefined) patch.guestsCanSeeOtherGuests = permissions.guestsCanSeeGuests
-  return patch
-}
 
 function asMillis(value: calendar_v3.Schema$EventDateTime | null | undefined): number | undefined {
   const raw = value?.dateTime ?? (value?.date ? value.date + "T00:00:00Z" : undefined)
@@ -160,7 +151,7 @@ export const updateEventTool = defineTool(
     description:
       "Updates an event on the given calendar. Fields that are not set will not be updated. Applies added*/removed* attendee and attachment deltas itself and preserves duration when only startTime is given. notificationLevel defaults to ALL.",
     inputSchema,
-    annotations: { idempotentHint: true, destructiveHint: false, openWorldHint: true }
+    annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true }
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
@@ -171,7 +162,7 @@ export const updateEventTool = defineTool(
 
     const patch: calendar_v3.Schema$Event = { ...simpleFieldPatch(args), ...timePatch(args, current) }
     if (args.guestPermissions !== undefined) {
-      Object.assign(patch, permissionPatch(args.guestPermissions))
+      Object.assign(patch, toGuestPermissionsInput(args.guestPermissions))
     }
     if (args.overrideReminders !== undefined) {
       patch.reminders = { useDefault: false, overrides: args.overrideReminders }

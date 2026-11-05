@@ -14,9 +14,20 @@ export abstract class McpServerBuilder<C> {
 
   protected abstract readonly name: string
   protected abstract readonly tools: readonly ToolDefinition<C>[]
-  protected abstract readonly resources: ResourceSource
+  protected readonly resources?: ResourceSource
 
-  protected abstract formatError(error: Error): string
+  /** An optional short Provider status to prefix to an error message. */
+  protected errorCode(_error: Error): string | undefined {
+    return undefined
+  }
+
+  /** One short line: a Provider body never becomes a tool error. */
+  protected formatError(error: Error): string {
+    const code = this.errorCode(error)
+    const message = error.message.split("\n")[0] ?? ""
+    const trimmed = message.slice(0, 300)
+    return code && !trimmed.includes(code) ? `${code}: ${trimmed}` : trimmed
+  }
 
   protected registerPrompts?(server: McpServer): void
 
@@ -36,16 +47,17 @@ export abstract class McpServerBuilder<C> {
     )
 
     new ToolRegistry(this.tools, error => this.formatError(error)).register(server, this.context)
-    this.resources.register(server)
+    const resources = this.resources
+    resources?.register(server)
     this.registerPrompts?.(server)
 
     // A server that registered no resources must not advertise them: installing the handlers
     // requires the capability, and an empty list is not the same as "not supported".
-    if (server.server.getCapabilities().resources) {
+    if (resources && server.server.getCapabilities().resources) {
       // The SDK's own resources/list drops a partial listing's ttlMs/_meta, so serve it here.
       server.server.removeRequestHandler("resources/list")
       server.server.setRequestHandler("resources/list", async () => {
-        const listing = await this.resources.list()
+        const listing = await resources.list()
         const result = { resources: listing.resources }
         if (listing.skipped.length > 0 || listing.truncated) {
           Object.assign(result, { ttlMs: 0, _meta: { "mcp-gateway/skippedAccounts": listing.skipped } })

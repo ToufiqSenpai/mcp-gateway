@@ -1,8 +1,8 @@
+import { listTools as readTools, stubContext, withClient } from "@mcp-gateway/test"
 import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { NotesServer } from "../../src/server"
-import { listTools as readTools, stubContext, withClient } from "../support/mcp"
 
 interface PropertySchema {
   type?: string
@@ -114,11 +114,13 @@ describe("notes tool contract", () => {
     }
   })
 
-  it("marks delete_page destructive and the list tools read-only", async () => {
+  it("marks delete_page destructive and the write tools non-read-only", async () => {
     const tools = await listTools()
     expect(tool(tools, "delete_page").annotations?.["destructiveHint"]).toBe(true)
     expect(tool(tools, "list_notebooks").annotations?.["readOnlyHint"]).toBe(true)
-    expect(tool(tools, "create_page").annotations?.["readOnlyHint"]).toBeUndefined()
+    for (const name of ["create_page", "update_page", "delete_page", "create_section", "create_notebook"]) {
+      expect(tool(tools, name).annotations?.["readOnlyHint"]).toBe(false)
+    }
   })
 
   it("has no prompts and nothing subscribable", async () => {

@@ -75,6 +75,7 @@ describe("admin routes", () => {
   it("answers an unknown MCP with 404", async () => {
     const browser = new TestBrowser()
     expect((await browser.get("/admin/mcps/mail")).status).toBe(404)
+    expect((await browser.get("/admin/mcps/mail/test")).status).toBe(404)
   })
 
   it("sets a Default Account through a POST that redirects with 303", async () => {
@@ -119,6 +120,16 @@ describe("admin routes", () => {
     expect(row?.access_token).toBeNull()
     expect(row?.refresh_token).toBeNull()
     expect(row?.is_default).toBe(0)
+  })
+
+  it("labels write tools from the tool annotations", async () => {
+    const browser = new TestBrowser()
+    const response = await browser.get("/admin/mcps/sheets/test")
+    const html = await response.text()
+
+    expect(html).toMatch(/update_values\s*\(write\)/)
+    expect(html).toMatch(/create_spreadsheet\s*\(write\)/)
+    expect(html).not.toMatch(/get_values\s*\(write\)/)
   })
 
   it("runs a tool in-process from the test panel", async () => {

@@ -42,7 +42,7 @@ export const createPageTool = defineTool(
       title: titleSchema,
       content: contentSchema
     }),
-    annotations: { destructiveHint: false, idempotentHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)

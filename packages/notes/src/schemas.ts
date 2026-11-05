@@ -1,11 +1,6 @@
 import { z } from "zod"
 
-/** Graph spells these resources with camelCase identifiers; descriptions follow the OneNote API reference. */
-export const accountSchema = z
-  .string()
-  .min(1)
-  .optional()
-  .describe("Account slug. Defaults to the Default Account for this MCP.")
+export { accountSchema } from "@mcp-gateway/common"
 
 export const cursorSchema = z
   .string()
