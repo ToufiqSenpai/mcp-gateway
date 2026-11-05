@@ -57,7 +57,7 @@ export class AccountService {
     return this.refresh.usable(await this.resolve(slug), true)
   }
 
-  public async accessTokenFor(account: Account): Promise<string> {
+  private async accessTokenFor(account: Account): Promise<string> {
     await this.assertUsable(account)
     return this.refresh.usable(account)
   }

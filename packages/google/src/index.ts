@@ -33,6 +33,8 @@ export class GoogleApiError extends Error {
  * 401. Each MCP derives its typed endpoint surface from this class.
  */
 export class Google {
+  private token?: string
+
   public constructor(
     private readonly ctx: McpContext,
     private readonly slug: string,
@@ -63,11 +65,18 @@ export class Google {
     return fetch(url, init)
   }
 
+  /** Memoized per instance; each instance belongs to one Account and one tool call. */
+  private async accessToken(force = false): Promise<string> {
+    if (!force && this.token) return this.token
+    this.token = force ? await this.ctx.refreshAccessToken(this.slug) : await this.ctx.getAccessToken(this.slug)
+    return this.token
+  }
+
   public async call<T>(path: string, options: RequestOptions = {}): Promise<{ data: T }> {
-    let response = await this.send(await this.ctx.getAccessToken(this.slug), path, options)
+    let response = await this.send(await this.accessToken(), path, options)
     if (response.status === 401) {
       // Reactive refresh: one forced rotation and one retry.
-      response = await this.send(await this.ctx.refreshAccessToken(this.slug), path, options)
+      response = await this.send(await this.accessToken(true), path, options)
     }
 
     const text = await response.text()
@@ -89,6 +98,6 @@ export class Google {
 }
 
 /** Reads the Provider error status without ever returning a raw body. */
-export function providerErrorCode(error: Error): string | undefined {
+export function googleStatus(error: Error): string | undefined {
   return error instanceof GoogleApiError ? String(error.status) : undefined
 }

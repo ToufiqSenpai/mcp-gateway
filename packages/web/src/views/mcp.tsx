@@ -1,3 +1,4 @@
+import { ACCOUNT_SLUG_PATTERN, type AccountErrorCode } from "../accounts/lifecycle-oauth"
 import type { Account } from "../db/schema"
 import { productIcon } from "./icons"
 import { Layout } from "./layout"
@@ -11,15 +12,17 @@ export interface McpPageProps {
   noticeKind?: "ok" | "error"
 }
 
-const ERROR_SENTENCES = new Map<string, string>([
-  ["denied", "The Provider did not complete the authorization."],
-  ["duplicate", "That Provider identity is already an Account on this MCP."],
-  ["no_refresh_token", "The Provider issued no refresh token, so the Account would not be usable."],
-  ["state", "That authorization attempt was invalid or had expired. Start again."],
-  ["identity_mismatch", "The Provider identity differs from the Account you tried to reauthorize."],
-  ["slug_taken", "That slug is already reserved for this MCP. Pick another."],
-  ["missing_scope", "Not every required permission was granted, so nothing was changed."]
-])
+const ERROR_SENTENCES = new Map<string, string>(
+  Object.entries({
+    denied: "The Provider did not complete the authorization.",
+    duplicate: "That Provider identity is already an Account on this MCP.",
+    no_refresh_token: "The Provider issued no refresh token, so the Account would not be usable.",
+    state: "That authorization attempt was invalid or had expired. Start again.",
+    identity_mismatch: "The Provider identity differs from the Account you tried to reauthorize.",
+    slug_taken: "That slug is already reserved for this MCP. Pick another.",
+    missing_scope: "Not every required permission was granted, so nothing was changed."
+  } satisfies Record<AccountErrorCode, string>)
+)
 
 export function errorSentence(code: string): string {
   return ERROR_SENTENCES.get(code) ?? "The request could not be completed."
@@ -58,7 +61,7 @@ export function McpPage({ mcp, accounts, csrf, devBypass, notice, noticeKind }: 
           <input
             name="slug"
             required
-            pattern="[a-z0-9][a-z0-9-]{0,31}"
+            pattern={ACCOUNT_SLUG_PATTERN}
             placeholder="slug, e.g. personal"
             class="rounded border border-slate-300 px-2 py-1 font-mono text-sm"
           />

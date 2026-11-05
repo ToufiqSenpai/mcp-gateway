@@ -1,9 +1,9 @@
 import type { MetaValue } from "@mcp-gateway/common"
+import { stubContext } from "@mcp-gateway/test"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { ToolContext } from "../../src/tools/tool-context"
 import { updateSpreadsheetTool } from "../../src/tools/update-spreadsheet"
-import { stubContext } from "../support/mcp"
 import { json, onlyRequest, serve } from "../support/provider"
 
 const BATCH_RESPONSE = { spreadsheetId: "sheet-1", replies: [{}, {}] }

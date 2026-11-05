@@ -23,7 +23,7 @@ function isPermanentRefreshFailure(error: Error | undefined): boolean {
   return ["invalid_grant", "interaction_required", "invalid_client"].includes(error.code)
 }
 
-function providerErrorCode(error: Error | undefined): string {
+function lastErrorCode(error: Error | undefined): string {
   if (error instanceof OAuthTokenError) return error.code
   if (error instanceof Error && error.name !== "Error") return error.name
   return "refresh_failed"
@@ -138,7 +138,7 @@ export class RefreshService {
         const code = error instanceof OAuthTokenError ? error.code : "invalid_grant"
         await demoteAccount(this.repository, account, "needs_reauth", code)
       }
-      await this.repository.update(account.id, { lastError: providerErrorCode(error) })
+      await this.repository.update(account.id, { lastError: lastErrorCode(error) })
       if (account.accessTokenExpiresAt > nowSeconds()) return { token: await this.currentAccessToken(account) }
       throw new Error(`Account "${account.slug}" could not be refreshed; retry shortly.`)
     }

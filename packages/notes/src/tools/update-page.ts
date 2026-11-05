@@ -28,7 +28,7 @@ export const updatePageTool = defineTool(
       pageId: pageIdSchema,
       commands: z.array(commandSchema).min(1).describe("Required. The patch commands to apply to the page content.")
     }),
-    annotations: { destructiveHint: false, idempotentHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
   },
   async (args, context: ToolContext) => {
     validateCommands(args.commands)

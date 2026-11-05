@@ -1,10 +1,6 @@
 import { z } from "zod"
 
-export const accountSchema = z
-  .string()
-  .min(1)
-  .optional()
-  .describe("Account slug. Defaults to the Default Account for this MCP.")
+export { accountSchema } from "@mcp-gateway/common"
 
 /** A cell Google accepts on write; `null` is skipped and an empty string clears the cell. */
 export const cellValueSchema = z

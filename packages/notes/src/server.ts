@@ -9,7 +9,7 @@ import { ToolContext } from "./tools/tool-context"
 export class NotesServer extends McpServerBuilder<ToolContext> {
   protected readonly name = "notes"
   protected readonly tools = notesTools
-  protected readonly resources: NotebookResourceRegistry
+  protected override readonly resources: NotebookResourceRegistry
 
   public constructor(mcp: McpContext) {
     super(new ToolContext(mcp))
@@ -17,7 +17,7 @@ export class NotesServer extends McpServerBuilder<ToolContext> {
   }
 
   /** One short line: a raw Graph body never becomes a tool error. */
-  protected formatError(error: Error): string {
+  protected override formatError(error: Error): string {
     if (error instanceof GraphError) {
       return `${error.code}: ${error.message}`.slice(0, 300)
     }

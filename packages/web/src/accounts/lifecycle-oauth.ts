@@ -10,7 +10,20 @@ import type { Account, McpSlug, OAuthAttempt as OAuthAttemptRow, Provider } from
 import type { Env } from "../env"
 
 /** The slug a user types on the MCP's admin page, unique per MCP. */
-export const AccountSlug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/)
+export const ACCOUNT_SLUG_PATTERN = "[a-z0-9][a-z0-9-]{0,31}"
+export const AccountSlug = z.string().regex(new RegExp(`^${ACCOUNT_SLUG_PATTERN}$`))
+
+/** Every code the OAuth callback can report; the admin page must translate each one. */
+export const ACCOUNT_ERRORS = [
+  "denied",
+  "duplicate",
+  "no_refresh_token",
+  "state",
+  "identity_mismatch",
+  "slug_taken",
+  "missing_scope"
+] as const
+export type AccountErrorCode = (typeof ACCOUNT_ERRORS)[number]
 
 const STATE_TTL_SECONDS = 600
 
@@ -65,7 +78,7 @@ export interface CallbackInput {
 export interface CallbackOutcome {
   mcp: McpSlug
   addedSlug?: string
-  error?: "denied" | "duplicate" | "no_refresh_token" | "state" | "identity_mismatch" | "slug_taken" | "missing_scope"
+  error?: AccountErrorCode
   duplicateSlug?: string
 }
 

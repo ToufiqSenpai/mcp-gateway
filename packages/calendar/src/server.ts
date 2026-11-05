@@ -1,7 +1,7 @@
 import { McpServerBuilder, PromptContext, PromptRegistry, type McpContext } from "@mcp-gateway/common"
 import type { McpServer } from "@modelcontextprotocol/server"
 
-import { providerErrorCode } from "./client"
+import { googleStatus } from "./client"
 import { calendarPrompts } from "./prompts"
 import { CalendarResourceRegistry } from "./resources"
 import { calendarTools } from "./tools"
@@ -11,7 +11,7 @@ import { ToolContext } from "./tools/tool-context"
 export class CalendarServer extends McpServerBuilder<ToolContext> {
   protected readonly name = "calendar"
   protected readonly tools = calendarTools
-  protected readonly resources: CalendarResourceRegistry
+  protected override readonly resources: CalendarResourceRegistry
 
   public constructor(private readonly mcp: McpContext) {
     super(new ToolContext(mcp))
@@ -19,11 +19,8 @@ export class CalendarServer extends McpServerBuilder<ToolContext> {
   }
 
   /** One short line: a Provider body never becomes a tool error. */
-  protected formatError(error: Error): string {
-    const code = providerErrorCode(error)
-    const message = error.message.split("\n")[0] ?? ""
-    const trimmed = message.slice(0, 300)
-    return code && !trimmed.includes(code) ? `${code}: ${trimmed}` : trimmed
+  protected override errorCode(error: Error): string | undefined {
+    return googleStatus(error)
   }
 
   protected override registerPrompts(server: McpServer): void {

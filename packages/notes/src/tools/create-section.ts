@@ -18,7 +18,7 @@ export const createSectionTool = defineTool(
       notebookId: notebookIdSchema.optional(),
       sectionGroupId: sectionGroupIdSchema.optional()
     }),
-    annotations: { destructiveHint: false, idempotentHint: false }
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
   },
   async (args, context: ToolContext) => {
     const hasNotebook = Boolean(args.notebookId)
