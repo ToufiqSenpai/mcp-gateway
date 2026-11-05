@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": false,
+  "trailingComma": "none",
+  "tabWidth": 2,
+  "printWidth": 120,
+  "semi": false,
+  "arrowParens": "avoid",
+  "bracketSpacing": true,
+  "useTabs": false,
+  "endOfLine": "lf",
+  "quoteProps": "as-needed",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "coverage/",
+    ".wrangler/",
+    ".agents/**",
+    ".codebuddy/**",
+    ".opencode/**",
+    ".specify/**",
+    "tools/oxlint/anti-slop/**",
+    "packages/web/src/admin/app.generated.css"
+  ],
+  "sortImports": true
+}

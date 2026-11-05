@@ -1,0 +1,7 @@
+# Cloudflare Access is the only gateway authentication
+
+MCP clients can set arbitrary HTTP headers, but the protocol's OAuth discovery flow would require the gateway to mint and validate its own bearer tokens — a token service, a JWKS, and rotation, for one user. Instead the gateway sits behind two Cloudflare Access applications: human One-time PIN for `/`, `/admin*` and `/oauth/*`, and Service Auth for `/mcps/*` with strict service-token mode. The Worker verifies `Cf-Access-Jwt-Assertion` against the team JWKS itself rather than trusting the edge, and classifies the token as service (`sub` empty, `common_name` present) or human (`email` present) to enforce which route group each may reach.
+
+**Consequences.** A custom hostname is mandatory — Access cannot protect `*.workers.dev`, so `workers_dev` and preview URLs are off. Every MCP client must send `CF-Access-Client-Id` and `CF-Access-Client-Secret`; a client that cannot set headers cannot connect. There is no `WWW-Authenticate` challenge and no protected-resource metadata, so a misconfigured client gets `401`/`403`, not a discovery document. Missing or invalid service tokens never redirect to a login page.
+
+**Considered Options.** Self-issued bearer tokens behind an OAuth authorization server would be portable to any MCP client, at the cost of owning token issuance, storage and rotation for a single user. Header-presence-only trust was rejected: a missing Access application would then silently expose the path.

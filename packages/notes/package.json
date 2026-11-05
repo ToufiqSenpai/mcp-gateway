@@ -1,0 +1,19 @@
+{
+  "name": "@mcp-gateway/notes",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp-gateway/common": "workspace:*",
+    "@microsoft/kiota-abstractions": "1.0.0-preview.112",
+    "@microsoft/msgraph-sdk": "1.0.0-preview.92",
+    "@microsoft/msgraph-sdk-users": "1.0.0-preview.92"
+  }
+}

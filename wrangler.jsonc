@@ -1,0 +1,21 @@
+// One Worker, one custom hostname, no env blocks. Replace the database_id and KV id
+// with the values wrangler prints at provisioning time (see README.md).
+{
+  "name": "mcp-gateway",
+  "main": "packages/web/src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "mcp.mhmtaufiq.foo", "custom_domain": true }],
+  "vars": { "ENVIRONMENT": "production", "PUBLIC_HOSTNAME": "mcp.mhmtaufiq.foo" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mcp-gateway",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "packages/web/migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "00000000000000000000000000000000" }],
+  "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": false }]
+}
