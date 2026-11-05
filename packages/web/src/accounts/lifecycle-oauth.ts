@@ -9,7 +9,7 @@ import { OAuthStateRepository } from "../db/oauth-state-repository"
 import type { Account, McpSlug, OAuthAttempt as OAuthAttemptRow, Provider } from "../db/schema"
 import type { Env } from "../env"
 
-/** The slug a user types on the MCP's admin page (SPEC §8.1), unique per MCP. */
+/** The slug a user types on the MCP's admin page, unique per MCP. */
 export const AccountSlug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/)
 
 const STATE_TTL_SECONDS = 600

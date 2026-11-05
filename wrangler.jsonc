@@ -1,5 +1,5 @@
 // One Worker, one custom hostname, no env blocks. Replace the database_id and KV id
-// with the values wrangler prints at provisioning time (see docs/RUNBOOK.md).
+// with the values wrangler prints at provisioning time (see README.md).
 {
   "name": "mcp-gateway",
   "main": "packages/web/src/index.ts",

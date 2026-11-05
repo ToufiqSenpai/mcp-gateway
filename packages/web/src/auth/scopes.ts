@@ -3,7 +3,7 @@ import { REQUIRED_SCOPES as NOTES_SCOPES } from "@mcp-gateway/notes"
 
 import type { McpSlug } from "../db/schema"
 
-/** The Required scope set for an MCP: one constant in the MCP's own module (SPEC §9.2). */
+/** The Required scope set for an MCP: one constant in the MCP's own module. */
 export function requiredScopes(mcp: McpSlug): readonly string[] {
   return mcp === "calendar" ? CALENDAR_SCOPES : NOTES_SCOPES
 }

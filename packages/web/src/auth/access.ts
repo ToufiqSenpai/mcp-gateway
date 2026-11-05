@@ -31,7 +31,7 @@ function teamDomain(env: Env): string {
 
 /** The only claims this verifier reads; every other claim is ignored. */
 const AccessClaims = z.object({
-  // "" is what an Access service token carries; a human carries an RFC 9562 UUID (SPEC §7.3).
+  // "" is what an Access service token carries; a human carries an RFC 9562 UUID.
   sub: z.uuid().or(z.literal("")).optional(),
   email: z.string().optional(),
   common_name: z.string().optional()
