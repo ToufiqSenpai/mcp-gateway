@@ -1,6 +1,6 @@
 import { ToolContext as CommonToolContext, paginate } from "@mcp-gateway/common"
 
-import { graphClient } from "../client"
+import { GraphClient } from "../client"
 
 const PAGE_SIZE = 100
 
@@ -10,7 +10,7 @@ const PAGE_SIZE = 100
  */
 export class ToolContext extends CommonToolContext {
   public graph(slug: string) {
-    return graphClient(this.ctx, slug)
+    return new GraphClient(this.ctx, slug)
   }
 
   public async paginate<T>(options: {

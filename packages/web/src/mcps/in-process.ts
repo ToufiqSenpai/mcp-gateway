@@ -39,11 +39,3 @@ export class InProcessRunner {
     }
   }
 }
-
-export function listTools(env: Env, mcp: McpSlug): Promise<Tool[]> {
-  return new InProcessRunner(env).listTools(mcp)
-}
-
-export function callTool(env: Env, mcp: McpSlug, name: string, args: ToolArguments): Promise<CallToolResult> {
-  return new InProcessRunner(env).callTool(mcp, name, args)
-}

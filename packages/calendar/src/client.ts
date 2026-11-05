@@ -195,10 +195,6 @@ export class GoogleCalendarClient {
   }
 }
 
-export function googleCalendar(ctx: McpContext, slug: string, rootUrl: string = GOOGLE_ROOT_URL): GoogleCalendarClient {
-  return new GoogleCalendarClient(ctx, slug, rootUrl)
-}
-
 /** Reads the Provider error status without ever returning a raw body. */
 export function providerErrorCode(error: Error): string | undefined {
   return error instanceof GoogleApiError ? String(error.status) : undefined

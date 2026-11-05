@@ -11,7 +11,7 @@ import { AccountRepository } from "../db/account-repository"
 import { nowSeconds } from "../db/client"
 import type { Account } from "../db/schema"
 import type { AppEnv } from "../index"
-import { callTool, listTools } from "../mcps/in-process"
+import { InProcessRunner } from "../mcps/in-process"
 import { isMcpSlug, MCP_REGISTRY } from "../mcps/registry"
 import { HomePage, loadMcpRows } from "../views/home"
 import { McpPage, RevokeConfirmationPage, errorSentence } from "../views/mcp"
@@ -211,7 +211,10 @@ adminRoutes.get("/mcps/:mcp/test", async c => {
   const mcp = c.req.param("mcp")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const [tools, accounts] = await Promise.all([listTools(c.env, mcp), new AccountRepository(c.env).listByMcp(mcp)])
+  const [tools, accounts] = await Promise.all([
+    new InProcessRunner(c.env).listTools(mcp),
+    new AccountRepository(c.env).listByMcp(mcp)
+  ])
 
   return c.html(
     <TestToolPage
@@ -233,7 +236,10 @@ adminRoutes.post("/mcps/:mcp/test", async c => {
   const account = form["account"] ?? ""
   const rawArgs = form["args"] || "{}"
 
-  const [tools, accounts] = await Promise.all([listTools(c.env, mcp), new AccountRepository(c.env).listByMcp(mcp)])
+  const [tools, accounts] = await Promise.all([
+    new InProcessRunner(c.env).listTools(mcp),
+    new AccountRepository(c.env).listByMcp(mcp)
+  ])
 
   const page = (notice: string | undefined) =>
     c.html(
@@ -268,7 +274,7 @@ adminRoutes.post("/mcps/:mcp/test", async c => {
   let body: string
   let isError: boolean
   try {
-    const reply = await callTool(c.env, mcp, tool, args)
+    const reply = await new InProcessRunner(c.env).callTool(mcp, tool, args)
     body = JSON.stringify(reply, null, 2)
     isError = reply.isError === true
   } catch (error) {

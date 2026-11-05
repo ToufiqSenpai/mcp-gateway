@@ -243,7 +243,3 @@ export class GraphClient {
     return this.run(call)
   }
 }
-
-export function graphClient(ctx: McpContext, slug: string, baseUrl?: string): GraphClient {
-  return new GraphClient(ctx, slug, baseUrl)
-}

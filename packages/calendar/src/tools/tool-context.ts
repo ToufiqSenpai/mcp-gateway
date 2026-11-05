@@ -1,6 +1,6 @@
 import { ToolContext as CommonToolContext, paginate } from "@mcp-gateway/common"
 
-import { googleCalendar } from "../client"
+import { GoogleCalendarClient } from "../client"
 
 /** Page size the wire documents; a caller may ask for less, never more. */
 function clampPageSize(requested: number | undefined): number {
@@ -14,7 +14,7 @@ function clampPageSize(requested: number | undefined): number {
  */
 export class ToolContext extends CommonToolContext {
   public calendar(slug: string) {
-    return googleCalendar(this.ctx, slug)
+    return new GoogleCalendarClient(this.ctx, slug)
   }
 
   public async paginate<T>(options: {
