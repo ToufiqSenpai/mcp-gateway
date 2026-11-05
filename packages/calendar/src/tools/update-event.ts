@@ -167,7 +167,7 @@ export const updateEventTool = defineTool(
     const client = context.calendar(slug)
     const calendarId = args.calendarId ?? "primary"
 
-    const current = (await client.events.get({ calendarId, eventId: args.eventId })).data
+    const current = (await client.getEvent({ calendarId, eventId: args.eventId })).data
 
     const patch: calendar_v3.Schema$Event = { ...simpleFieldPatch(args), ...timePatch(args, current) }
     if (args.guestPermissions !== undefined) {
@@ -196,7 +196,7 @@ export const updateEventTool = defineTool(
       requestBody: patch
     }
     if (patch.conferenceData) params.conferenceDataVersion = 1
-    const response = await client.events.patch(params)
+    const response = await client.patchEvent(params)
 
     return toEvent(response.data)
   }

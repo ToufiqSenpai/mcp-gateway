@@ -28,12 +28,15 @@ export class GoogleApiError extends Error {
   }
 }
 
-/** One Account's authenticated transport: token at the edge, one refresh-and-retry on 401. */
-export class GoogleRequest {
+/**
+ * One Account's authenticated Google transport: token at the edge, one refresh-and-retry on
+ * 401. Each MCP derives its typed endpoint surface from this class.
+ */
+export class Google {
   public constructor(
     private readonly ctx: McpContext,
     private readonly slug: string,
-    private readonly rootUrl: string
+    private readonly rootUrl: string = GOOGLE_ROOT_URL
   ) {}
 
   private send(token: string, path: string, options: RequestOptions): Promise<Response> {

@@ -26,7 +26,7 @@ export const getSpreadsheetTool = defineTool(
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
-    const response = await context.sheets(slug).spreadsheets.get({
+    const response = await context.sheets(slug).getSpreadsheet({
       spreadsheetId: args.spreadsheetId,
       includeGridData: args.includeGridData,
       fields: args.fields?.join(","),

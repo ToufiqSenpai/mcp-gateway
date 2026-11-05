@@ -1,5 +1,5 @@
 {
-  "name": "@mcp-gateway/google-api",
+  "name": "@mcp-gateway/test",
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -8,6 +8,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@mcp-gateway/common": "workspace:*"
+    "@mcp-gateway/common": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0"
   }
 }

@@ -29,7 +29,7 @@ export const insertDimensionTool = defineTool(
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
-    const response = await context.sheets(slug).spreadsheets.batchUpdate({
+    const response = await context.sheets(slug).batchUpdate({
       spreadsheetId: args.spreadsheetId,
       requestBody: {
         requests: [

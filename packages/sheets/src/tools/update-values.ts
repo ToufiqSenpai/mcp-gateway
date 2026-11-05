@@ -21,7 +21,7 @@ export const updateValuesTool = defineTool(
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
-    const response = await context.sheets(slug).values.update({
+    const response = await context.sheets(slug).updateValues({
       spreadsheetId: args.spreadsheetId,
       range: args.range,
       valueInputOption: "RAW",

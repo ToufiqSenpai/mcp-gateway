@@ -1,15 +1,16 @@
 import { listAccountsTool } from "@mcp-gateway/common"
+import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { REQUIRED_SCOPES } from "../../src"
 import { SheetsServer } from "../../src/server"
 import reference from "../fixtures/google-sheets-tools.json" with { type: "json" }
-import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
+import { listTools as readTools, stubContext } from "../support/mcp"
 
 interface PropertySchema {
   type?: string | string[]
   enum?: string[]
-  default?: JsonValue
+  default?: JSONValue
   description?: string
   properties?: Record<string, PropertySchema>
   items?: PropertySchema
@@ -69,9 +70,8 @@ function contractFields(schema: PropertySchema): PropertySchema {
   return result
 }
 
-async function listTools(server = new SheetsServer(stubContext).build()): Promise<ToolListing[]> {
-  const reply = await call(server, { method: "tools/list", params: {} })
-  return asReply<ToolListing[]>(reply.result?.["tools"])
+function listTools(server = new SheetsServer(stubContext).build()): Promise<ToolListing[]> {
+  return readTools<ToolListing>(server)
 }
 
 function tool(tools: ToolListing[], name: string): ToolListing {
@@ -129,8 +129,7 @@ describe("sheets tool contract", () => {
   })
 
   it("matches each published Input Schema field by field", async () => {
-    // SAFETY: the fixture is hand-transcribed JSON in exactly this shape.
-    const expectedTools = asReply<Record<string, ReferenceTool>>(reference)
+    const expectedTools: Record<string, ReferenceTool> = reference
     const tools = await listTools()
 
     for (const [name, expected] of Object.entries(expectedTools)) {

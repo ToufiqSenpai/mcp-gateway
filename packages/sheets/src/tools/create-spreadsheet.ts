@@ -20,7 +20,7 @@ export const createSpreadsheetTool = defineTool(
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const requestBody = args.title?.length ? { properties: { title: args.title } } : {}
-    const response = await context.sheets(slug).spreadsheets.create({ requestBody })
+    const response = await context.sheets(slug).createSpreadsheet({ requestBody })
     return { content: response.data, status: "SUCCESS" }
   }
 )

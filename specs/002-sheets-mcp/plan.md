@@ -105,7 +105,7 @@ packages/web/
 
 | Item | Why needed | Alternative rejected |
 | --- | --- | --- |
-| Shared Google transport in `packages/google-api` | Calendar and Sheets call Google identically; one copy keeps the 401 refresh, error mapping and token handling in one place | Duplicating ~60 lines per MCP (fails the duplication gate); move `GoogleRequest` to `common` (violates ADR-0008 boundary); import from `calendar` (couples two MCPs) |
+| Shared Google transport in `packages/google` | Calendar and Sheets call Google identically; one copy keeps the 401 refresh, error mapping and token handling in one place | Duplicating ~60 lines per MCP (fails the duplication gate); move `Google` to `common` (violates ADR-0008 boundary); import from `calendar` (couples two MCPs) |
 | One type-only SDK dependency (`@googleapis/sheets`) | The exact Schemas and enums are the feature; hand-written types would drift | Local structural types (unverifiable), SDK runtime (larger bundle than needed) |
 | Generated migration rebuilding `accounts` | SQLite cannot alter a CHECK constraint in place; the enum and pairing must change | New table or a second accounts table (breaks the single-Account model) |
 | `create_spreadsheet` outside the reference | User decision, recorded in spec Clarifications; no Drive scope | Omitting it (user asked for file creation), Drive API (scope escalation) |

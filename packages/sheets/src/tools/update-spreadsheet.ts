@@ -27,7 +27,7 @@ export const updateSpreadsheetTool = defineTool(
     const slug = await context.resolve(args.account)
     // SAFETY: `requests` is any documented batchUpdate JSON object, which is exactly Schema$Request's wire shape.
     const requests = args.requests as sheets_v4.Schema$Request[]
-    const response = await context.sheets(slug).spreadsheets.batchUpdate({
+    const response = await context.sheets(slug).batchUpdate({
       spreadsheetId: args.spreadsheetId,
       requestBody: { requests, writeControl: args.writeControl }
     })

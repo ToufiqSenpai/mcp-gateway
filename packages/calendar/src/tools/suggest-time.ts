@@ -144,7 +144,7 @@ export const suggestTimeTool = defineTool(
     const windowStart = Date.parse(args.startTime)
     const windowEnd = Date.parse(args.endTime)
 
-    const response = await client.freebusy.query({
+    const response = await client.queryFreeBusy({
       requestBody: {
         timeMin: args.startTime,
         timeMax: args.endTime,

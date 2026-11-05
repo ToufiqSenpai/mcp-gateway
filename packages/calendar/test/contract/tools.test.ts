@@ -1,14 +1,15 @@
+import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { CalendarServer } from "../../src/server"
-import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
+import { listTools as readTools, stubContext, withClient } from "../support/mcp"
 
 interface PropertySchema {
   type?: string
   pattern?: string
   format?: string
   maximum?: number
-  default?: JsonValue
+  default?: JSONValue
   properties?: Record<string, PropertySchema>
   items?: PropertySchema
   required?: string[]
@@ -25,9 +26,8 @@ interface ToolListing {
   annotations?: Record<string, boolean>
 }
 
-async function listTools(server = new CalendarServer(stubContext).build()): Promise<ToolListing[]> {
-  const reply = await call(server, { method: "tools/list", params: {} })
-  return asReply<ToolListing[]>(reply.result?.["tools"])
+function listTools(server = new CalendarServer(stubContext).build()): Promise<ToolListing[]> {
+  return readTools<ToolListing>(server)
 }
 
 function tool(tools: ToolListing[], name: string): ToolListing {
@@ -119,17 +119,16 @@ describe("calendar tool contract", () => {
   })
 
   it("answers an unknown tool with -32602", async () => {
-    const reply = await call(new CalendarServer(stubContext).build(), {
-      method: "tools/call",
-      params: { name: "not_a_tool", arguments: {} }
+    await withClient(new CalendarServer(stubContext).build(), async client => {
+      await expect(client.callTool({ name: "not_a_tool", arguments: {} })).rejects.toMatchObject({ code: -32602 })
     })
-    expect(reply.error?.code).toBe(-32602)
   })
 
-  it('returns every successful result as resultType "complete" with cache hints', async () => {
-    const reply = await call(new CalendarServer(stubContext).build(), { method: "tools/list", params: {} })
-    expect(reply.result?.["resultType"]).toBe("complete")
-    expect(reply.result?.["ttlMs"]).toBe(3_600_000)
-    expect(reply.result?.["cacheScope"]).toBe("public")
+  it("serves a cacheable tools/list result", async () => {
+    const { ttlMs, cacheScope } = await withClient(new CalendarServer(stubContext).build(), client =>
+      client.listTools()
+    )
+    expect(ttlMs).toBe(3_600_000)
+    expect(cacheScope).toBe("public")
   })
 })

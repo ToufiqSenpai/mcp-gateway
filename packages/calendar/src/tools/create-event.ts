@@ -153,7 +153,7 @@ export const createEventTool = defineTool(
       requestBody
     }
     if (conferenceData) params.conferenceDataVersion = 1
-    const response = await client.events.insert(params)
+    const response = await client.insertEvent(params)
 
     return toEvent(response.data)
   }

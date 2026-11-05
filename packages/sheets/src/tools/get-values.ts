@@ -23,7 +23,7 @@ export const getValuesTool = defineTool(
   },
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
-    const response = await context.sheets(slug).values.get({
+    const response = await context.sheets(slug).getValues({
       spreadsheetId: args.spreadsheetId,
       range: args.range
     })
