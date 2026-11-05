@@ -1,7 +1,6 @@
 import { Hono } from "hono"
 
 import { AccessError, verifyAccess, type AccessIdentity } from "./auth/access"
-import type { Database } from "./db/client"
 import type { Env } from "./env"
 import { adminRoutes } from "./routes/admin"
 import { mcpRoutes } from "./routes/mcps"
@@ -9,7 +8,7 @@ import { oauthRoutes } from "./routes/oauth"
 
 export interface AppEnv {
   Bindings: Env
-  Variables: { identity: AccessIdentity; form: Record<string, string>; db: Database }
+  Variables: { identity: AccessIdentity; form: Record<string, string> }
 }
 
 type RouteGroup = "admin" | "mcp"

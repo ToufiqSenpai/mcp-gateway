@@ -1,5 +1,4 @@
 import { AccountRepository } from "../db/account-repository"
-import { createDb } from "../db/client"
 import type { Env } from "../env"
 import { MCP_REGISTRY, MCP_SLUGS } from "../mcps/registry"
 import { Layout } from "../views/layout"
@@ -12,7 +11,7 @@ export interface McpRow {
 }
 
 export async function loadMcpRows(env: Env): Promise<McpRow[]> {
-  const repository = new AccountRepository(createDb(env))
+  const repository = new AccountRepository(env)
   return Promise.all(
     MCP_SLUGS.map(async slug => {
       const [counts, defaultAccount] = await Promise.all([repository.countByState(slug), repository.findDefault(slug)])

@@ -1,21 +1,16 @@
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm"
 
-import type { Database } from "./client"
-import { nowSeconds } from "./client"
-import {
-  accounts,
-  oauthStates,
-  type Account,
-  type McpSlug,
-  type NewAccount,
-  type NewOAuthAttempt,
-  type OAuthAttempt,
-  type Provider
-} from "./schema"
+import type { Env } from "../env"
+import { createDb, nowSeconds, type Database } from "./client"
+import { accounts, type Account, type McpSlug, type NewAccount, type Provider } from "./schema"
 
-/** Every Account and OAuth-state statement the Worker makes, over one D1 handle. */
+/** Every Account statement the Worker makes, over one D1 handle. */
 export class AccountRepository {
-  public constructor(private readonly db: Database) {}
+  private readonly db: Database
+
+  public constructor(env: Pick<Env, "DB">) {
+    this.db = createDb(env)
+  }
 
   public findBySlug(mcp: McpSlug, slug: string): Promise<Account | undefined> {
     return this.db
@@ -144,19 +139,5 @@ export class AccountRepository {
       .groupBy(accounts.state)
       .all()
     return Object.fromEntries(rows.map(row => [row.state, row.count]))
-  }
-
-  public async insertOAuthState(attempt: NewOAuthAttempt): Promise<void> {
-    await this.db.insert(oauthStates).values(attempt)
-  }
-
-  /** Single-use consumption: `DELETE … RETURNING` in one statement. */
-  public async takeOAuthState(state: string): Promise<OAuthAttempt | undefined> {
-    const rows = await this.db.delete(oauthStates).where(eq(oauthStates.state, state)).returning()
-    return rows[0]
-  }
-
-  public async deleteExpiredOAuthStates(now = nowSeconds()): Promise<void> {
-    await this.db.delete(oauthStates).where(lt(oauthStates.expiresAt, now))
   }
 }

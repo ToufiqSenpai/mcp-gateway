@@ -1,10 +1,16 @@
 export type { McpContext } from "@mcp-gateway/common"
-export { createServer } from "./server"
+export { CalendarServer } from "./server"
 
 /**
  * The Required scope set for the `calendar` MCP. One constant for the authorize URL, the
- * callback check and the call-path check.
+ * callback check and the call-path check. Google returns these scopes in their canonical
+ * userinfo-URL form, so the request uses that form too.
  */
-export const REQUIRED_SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/calendar"] as const
+export const REQUIRED_SCOPES = [
+  "openid",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "https://www.googleapis.com/auth/calendar"
+] as const
 
 export const REQUIRED_SCOPE_STRING = REQUIRED_SCOPES.join(" ")

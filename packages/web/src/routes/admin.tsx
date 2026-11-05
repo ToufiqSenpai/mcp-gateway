@@ -2,13 +2,12 @@ import { ProtocolError } from "@modelcontextprotocol/server"
 import { Hono } from "hono"
 import { z } from "zod"
 
-import { AccountSlug, RetryableContentionError, SlugTakenError, startAuthorization } from "../accounts/lifecycle-oauth"
+import { AccountSlug, OAuthFlowService, RetryableContentionError, SlugTakenError } from "../accounts/lifecycle-oauth"
 import { isDevBypass } from "../auth/access"
-import { callbackUri, providerClient } from "../auth/arctic"
 import { ensureCsrfToken, isCsrfValid, isSameOrigin, setOAuthFlowCookie } from "../auth/cookies"
-import { decryptToken } from "../auth/crypto"
+import { TokenCipher } from "../auth/crypto"
+import { OAuthProvider } from "../auth/oauth"
 import { AccountRepository } from "../db/account-repository"
-import { createDb } from "../db/client"
 import { nowSeconds } from "../db/client"
 import type { Account } from "../db/schema"
 import type { AppEnv } from "../index"
@@ -40,15 +39,17 @@ function textFields(body: Record<string, string | File>): Record<string, string>
   return Object.fromEntries(Object.entries(body).map(([key, value]) => [key, value instanceof File ? "" : value]))
 }
 
-async function revokeAccount(env: AppEnv["Bindings"], account: Account, requestUrl: string): Promise<void> {
-  if (account.provider === "google" && account.refreshToken) {
-    try {
-      const token = await decryptToken(env.TOKEN_ENCRYPTION_KEY, account.refreshToken, account.id, "refresh_token")
-      const client = providerClient(env, "google", callbackUri(requestUrl, "google"))
-      if ("revokeToken" in client) await client.revokeToken(token)
-    } catch {
-      // Best effort: a Provider-side revoke failure must not block the local revoke.
-    }
+async function revokeAccount(env: AppEnv["Bindings"], account: Account): Promise<void> {
+  if (!account.refreshToken) return
+  try {
+    const token = await new TokenCipher(env.TOKEN_ENCRYPTION_KEY).decrypt(
+      account.refreshToken,
+      account.id,
+      "refresh_token"
+    )
+    await OAuthProvider.for(env, account.provider).revoke(token)
+  } catch {
+    // Best effort: a Provider-side revoke failure must not block the local revoke.
   }
 }
 
@@ -64,7 +65,6 @@ adminRoutes.use("/mcps/:mcp/*", async (c, next) => {
   if (!isSameOrigin(c.req.raw) || !isCsrfValid(c, form["_csrf"])) return c.text("Forbidden", 403)
 
   c.set("form", form)
-  c.set("db", createDb(c.env))
   return next()
 })
 
@@ -88,8 +88,7 @@ adminRoutes.get("/mcps/:mcp", async c => {
   const mcp = c.req.param("mcp")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const db = createDb(c.env)
-  const accounts = await new AccountRepository(db).listByMcp(mcp)
+  const accounts = await new AccountRepository(c.env).listByMcp(mcp)
   const csrf = ensureCsrfToken(c)
   const added = c.req.query("added")
   const error = c.req.query("error")
@@ -117,7 +116,7 @@ adminRoutes.post("/mcps/:mcp/accounts", async c => {
   if (!slug.success) return c.text("Account slug must be lowercase letters, digits and dashes.", 400)
 
   try {
-    const started = await startAuthorization(c.env, c.get("db"), {
+    const started = await new OAuthFlowService(c.env).start({
       mcp,
       provider: MCP_REGISTRY[mcp].provider,
       slug: slug.data,
@@ -138,12 +137,11 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/reauth", async c => {
   const slug = c.req.param("slug")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const db = c.get("db")
-  const account = await new AccountRepository(db).findBySlug(mcp, slug)
+  const account = await new AccountRepository(c.env).findBySlug(mcp, slug)
   if (!account) return c.text("Not found", 404)
 
   try {
-    const started = await startAuthorization(c.env, db, {
+    const started = await new OAuthFlowService(c.env).start({
       mcp,
       provider: MCP_REGISTRY[mcp].provider,
       slug,
@@ -165,8 +163,7 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/default", async c => {
   const slug = c.req.param("slug")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const db = c.get("db")
-  const repository = new AccountRepository(db)
+  const repository = new AccountRepository(c.env)
   const account = await repository.findBySlug(mcp, slug)
   if (!account || account.state !== "active") return c.text("Not found", 404)
 
@@ -180,7 +177,7 @@ adminRoutes.get("/mcps/:mcp/accounts/:slug/revoke", async c => {
   const slug = c.req.param("slug")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const account = await new AccountRepository(createDb(c.env)).findBySlug(mcp, slug)
+  const account = await new AccountRepository(c.env).findBySlug(mcp, slug)
   if (!account) return c.text("Not found", 404)
 
   return c.html(
@@ -193,12 +190,11 @@ adminRoutes.post("/mcps/:mcp/accounts/:slug/revoke", async c => {
   const slug = c.req.param("slug")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const db = c.get("db")
-  const repository = new AccountRepository(db)
+  const repository = new AccountRepository(c.env)
   const account = await repository.findBySlug(mcp, slug)
   if (!account) return c.text("Not found", 404)
 
-  await revokeAccount(c.env, account, c.req.url)
+  await revokeAccount(c.env, account)
   await repository.update(account.id, {
     accessToken: null,
     refreshToken: null,
@@ -215,8 +211,7 @@ adminRoutes.get("/mcps/:mcp/test", async c => {
   const mcp = c.req.param("mcp")
   if (!isMcpSlug(mcp)) return c.text("Not found", 404)
 
-  const db = createDb(c.env)
-  const [tools, accounts] = await Promise.all([listTools(c.env, db, mcp), new AccountRepository(db).listByMcp(mcp)])
+  const [tools, accounts] = await Promise.all([listTools(c.env, mcp), new AccountRepository(c.env).listByMcp(mcp)])
 
   return c.html(
     <TestToolPage
@@ -238,8 +233,7 @@ adminRoutes.post("/mcps/:mcp/test", async c => {
   const account = form["account"] ?? ""
   const rawArgs = form["args"] || "{}"
 
-  const db = c.get("db")
-  const [tools, accounts] = await Promise.all([listTools(c.env, db, mcp), new AccountRepository(db).listByMcp(mcp)])
+  const [tools, accounts] = await Promise.all([listTools(c.env, mcp), new AccountRepository(c.env).listByMcp(mcp)])
 
   const page = (notice: string | undefined) =>
     c.html(
@@ -274,7 +268,7 @@ adminRoutes.post("/mcps/:mcp/test", async c => {
   let body: string
   let isError: boolean
   try {
-    const reply = await callTool(c.env, db, mcp, tool, args)
+    const reply = await callTool(c.env, mcp, tool, args)
     body = JSON.stringify(reply, null, 2)
     isError = reply.isError === true
   } catch (error) {

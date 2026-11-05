@@ -1,6 +1,6 @@
 # MCP servers are libraries, not Workers
 
-`packages/calendar` and `packages/notes` export `createServer(ctx)` and are never deployed on their own. They receive a narrow `McpContext` — `listAccounts()` and `getAccessToken(slug)` — and import no D1 binding, no `arctic`, and no encryption code. Accounts, Credentials, refresh and the MCP registry all live in `packages/web`, the single Worker entry.
+`packages/calendar` and `packages/notes` export their server classes (`CalendarServer` / `NotesServer`) and are never deployed on their own. They receive a narrow `McpContext` — `listAccounts()` and `getAccessToken(slug)` — and import no D1 binding, no OAuth client, and no encryption code. Accounts, Credentials, refresh and the MCP registry all live in `packages/web`, the single Worker entry.
 
 **Consequences.** Each MCP package is testable in a plain Node pool with no database and no network, which is where tool-handler and response-mapping tests live. The registry (`packages/web/src/mcps/registry.ts`) is the only list of MCPs, and a test asserts its keys equal the `mcp` CHECK enum so adding an MCP without a migration fails in CI. Adding an MCP is a deploy of the one Worker, never a second deployment.
 

@@ -6,14 +6,13 @@ import { fromBase64Url, toBase64Url } from "../lib/base64url"
 /**
  * AES-256-GCM for the two Credential columns. Fails closed: a missing or malformed key is a
  * generic 500, there is no plaintext fallback, and a ciphertext is bound to its row and
- * column through the AAD `<account_id>:<field>` (§9.1). New rows are `v2`; a `v1` envelope
- * written by Web Crypto stays readable until a refresh rewrites it.
+ * column through the AAD `<account_id>:<field>` (§9.1).
  */
 const ALGORITHM = "aes-256-gcm"
 const IV_BYTES = 12
 const TAG_BYTES = 16
 const KEY_BYTES = 32
-const ENVELOPE = /^(v1|v2)\.([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]+)$/
+const ENVELOPE = /^v2\.([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]+)$/
 
 export type TokenField = "access_token" | "refresh_token"
 
@@ -34,13 +33,6 @@ export class CredentialDecryptError extends Error {
 }
 
 const encoder = new TextEncoder()
-const decoder = new TextDecoder()
-
-function toBuffer(bytes: Uint8Array): ArrayBuffer {
-  // SAFETY: every caller builds the view over a plain ArrayBuffer (TextEncoder, Buffer.from,
-  // getRandomValues), and the slice copies that range into a fresh ArrayBuffer.
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-}
 
 function aad(accountId: string, field: TokenField): Uint8Array {
   return encoder.encode(`${accountId}:${field}`)
@@ -73,17 +65,13 @@ export class TokenCipher {
 
   public async decrypt(envelope: string, accountId: string, field: TokenField): Promise<string> {
     const match = ENVELOPE.exec(envelope)
-    if (!match?.[1] || !match[2] || !match[3]) throw new CredentialDecryptError()
-    const iv = fromBase64Url(match[2])
-    const body = Buffer.from(fromBase64Url(match[3]))
+    if (!match?.[1] || !match[2]) throw new CredentialDecryptError()
+    const iv = fromBase64Url(match[1])
+    const body = Buffer.from(fromBase64Url(match[2]))
     if (body.length < TAG_BYTES) throw new CredentialDecryptError()
 
     // A malformed key is a configuration failure, never a decryption failure.
     const key = this.key()
-    // shortcut: v1 envelopes keep their Web Crypto read path until every row has been rewritten
-    // by a refresh; delete it then.
-    if (match[1] === "v1") return this.decryptV1(key, iv, body, accountId, field)
-
     try {
       const decipher = createDecipheriv(ALGORITHM, key, iv)
       decipher.setAAD(aad(accountId, field))
@@ -95,29 +83,4 @@ export class TokenCipher {
       throw new CredentialDecryptError()
     }
   }
-
-  /** v1: Web Crypto appended the 16-byte tag to the ciphertext, the layout `v2` keeps. */
-  private async decryptV1(
-    key: Buffer,
-    iv: Uint8Array,
-    body: Buffer,
-    accountId: string,
-    field: TokenField
-  ): Promise<string> {
-    try {
-      const imported = await crypto.subtle.importKey("raw", toBuffer(key), { name: "AES-GCM" }, false, ["decrypt"])
-      const plaintext = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: toBuffer(iv), additionalData: toBuffer(aad(accountId, field)) },
-        imported,
-        toBuffer(body)
-      )
-      return decoder.decode(plaintext)
-    } catch {
-      throw new CredentialDecryptError()
-    }
-  }
-}
-
-export function decryptToken(rawKey: string, envelope: string, accountId: string, field: TokenField): Promise<string> {
-  return new TokenCipher(rawKey).decrypt(envelope, accountId, field)
 }

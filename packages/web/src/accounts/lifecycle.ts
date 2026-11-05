@@ -3,7 +3,6 @@ import type { McpContext } from "@mcp-gateway/common"
 import { TokenCipher } from "../auth/crypto"
 import { covers, parseScopes, requiredScopes } from "../auth/scopes"
 import { AccountRepository } from "../db/account-repository"
-import type { Database } from "../db/client"
 import type { Account, McpSlug } from "../db/schema"
 import type { Env } from "../env"
 import { EnumerationCache } from "../mcps/cache"
@@ -99,14 +98,9 @@ export class AccountService {
   }
 }
 
-/** The narrow `McpContext` an MCP package receives. It never sees D1, arctic or the key. */
-export function createMcpContext(
-  env: Env,
-  db: Database,
-  mcp: McpSlug,
-  waitUntil?: (promise: Promise<unknown>) => void
-): McpContext {
-  const repository = new AccountRepository(db)
+/** The narrow `McpContext` an MCP package receives. It never sees D1, the OAuth client or the key. */
+export function createMcpContext(env: Env, mcp: McpSlug, waitUntil?: (promise: Promise<unknown>) => void): McpContext {
+  const repository = new AccountRepository(env)
   return new GatewayMcpContext(
     new AccountService(env, repository, mcp),
     new HmacCursorCodec(env.CURSOR_SIGNING_KEY),

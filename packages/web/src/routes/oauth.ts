@@ -1,10 +1,9 @@
 import { Hono } from "hono"
 import { getCookie } from "hono/cookie"
 
-import { completeAuthorization } from "../accounts/lifecycle-oauth"
+import { OAuthFlowService } from "../accounts/lifecycle-oauth"
 import { clearOAuthFlowCookie } from "../auth/cookies"
-import { AccountRepository } from "../db/account-repository"
-import { createDb } from "../db/client"
+import { OAuthStateRepository } from "../db/oauth-state-repository"
 import type { AppEnv } from "../index"
 
 export const oauthRoutes = new Hono<AppEnv>()
@@ -20,17 +19,16 @@ oauthRoutes.get("/callback/:provider", async c => {
   // The cookie is the login-CSRF binding; Access is not this defence.
   if (!state || !cookie || cookie !== state) return c.redirect("/admin?error=state", 303)
 
-  const db = createDb(c.env)
   const providerError = c.req.query("error")
   if (providerError) {
-    const attempt = await new AccountRepository(db).takeOAuthState(state)
+    const attempt = await new OAuthStateRepository(c.env).take(state)
     return c.redirect(`/admin/mcps/${attempt?.mcp ?? "calendar"}?error=denied`, 303)
   }
 
   const code = c.req.query("code")
   if (!code) return c.redirect("/admin?error=state", 303)
 
-  const outcome = await completeAuthorization(c.env, db, {
+  const outcome = await new OAuthFlowService(c.env).complete({
     provider,
     state,
     code,

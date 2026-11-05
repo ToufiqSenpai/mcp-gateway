@@ -1,11 +1,19 @@
-import { REQUIRED_SCOPES as CALENDAR_SCOPES } from "@mcp-gateway/calendar"
 import { REQUIRED_SCOPES as NOTES_SCOPES } from "@mcp-gateway/notes"
 
 /**
  * Provider and Access endpoints are faked below the SDK at their real URLs. The Worker's
- * `fetch` is replaced for the test isolate, so `arctic`, the identity fetch and `jose` all
- * take the same path they take in production; nothing is stubbed at an SDK seam.
+ * `fetch` is replaced for the test isolate, so the OAuth client, the identity fetch and
+ * `jose` all take the same path they take in production; nothing is stubbed at an SDK seam.
+ *
+ * Google expands `email` and `profile` to their userinfo URLs in the token response, so the
+ * fixture does the same rather than echoing whatever the gateway asked for.
  */
+const GOOGLE_GRANTED_SCOPES = [
+  "openid",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "https://www.googleapis.com/auth/calendar"
+] as const
 export const ACCESS_TEAM_DOMAIN = "https://test.cloudflareaccess.com"
 
 /** One code per behaviour a test needs to force. */
@@ -31,6 +39,19 @@ export const REFRESH_TOKEN = {
   noScope: "refresh-no-scope"
 } as const
 
+/** The last token-endpoint request, for PKCE and grant assertions. */
+class TokenRequestLog {
+  public body?: URLSearchParams
+  public url?: string
+
+  public reset(): void {
+    this.body = undefined
+    this.url = undefined
+  }
+}
+
+export const lastTokenRequest = new TokenRequestLog()
+
 /** Counters for concurrency assertions; reset with `resetProviderCounters()`. */
 export const counters = {
   googleTokenRequests: 0,
@@ -44,6 +65,7 @@ export function resetProviderCounters(): void {
   counters.googleRefreshRequests = 0
   counters.microsoftRefreshRequests = 0
   counters.googleCalendarListRequests = 0
+  lastTokenRequest.reset()
 }
 
 export const ACCESS_TOKEN = {
@@ -71,7 +93,7 @@ const GOOGLE_IDENTITIES = new Map<string, Identity>([
       name: "Operator One",
       accessToken: ACCESS_TOKEN.googleOk,
       refreshToken: REFRESH_TOKEN.googleOk,
-      scopes: [...CALENDAR_SCOPES]
+      scopes: [...GOOGLE_GRANTED_SCOPES]
     }
   ],
   [
@@ -82,7 +104,7 @@ const GOOGLE_IDENTITIES = new Map<string, Identity>([
       name: "Operator Two",
       accessToken: ACCESS_TOKEN.googleSecond,
       refreshToken: REFRESH_TOKEN.googleSecond,
-      scopes: [...CALENDAR_SCOPES]
+      scopes: [...GOOGLE_GRANTED_SCOPES]
     }
   ]
 ])
@@ -259,6 +281,8 @@ async function route(request: Request): Promise<Response> {
     case "https://oauth2.googleapis.com":
       if (url.pathname === "/token" && request.method === "POST") {
         counters.googleTokenRequests += 1
+        lastTokenRequest.body = body
+        lastTokenRequest.url = request.url
         return body.get("grant_type") === "refresh_token" ? refresh(body, false) : exchangeGoogle(body)
       }
       if (url.pathname === "/revoke") return json(200, {})
@@ -270,6 +294,8 @@ async function route(request: Request): Promise<Response> {
 
     case "https://login.microsoftonline.com":
       if (url.pathname.endsWith("/oauth2/v2.0/token") && request.method === "POST") {
+        lastTokenRequest.body = body
+        lastTokenRequest.url = request.url
         return body.get("grant_type") === "refresh_token" ? refresh(body, true) : exchangeMicrosoft(body)
       }
       return json(404, { error: "not_found" })

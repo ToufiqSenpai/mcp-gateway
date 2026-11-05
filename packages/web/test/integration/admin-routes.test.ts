@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 
 import { TokenCipher } from "../../src/auth/crypto"
 import { AccountRepository } from "../../src/db/account-repository"
-import { createDb, nowSeconds } from "../../src/db/client"
+import { nowSeconds } from "../../src/db/client"
 import { TEST_ORIGIN, TestBrowser, adminJwt, appFetch, csrfFromPage } from "../support/access"
 
 const cipher = new TokenCipher(env.TOKEN_ENCRYPTION_KEY)
@@ -15,7 +15,7 @@ const REFRESH_PLAINTEXT = "1//plaintext-refresh-token"
 
 async function seedAccount(): Promise<void> {
   const id = crypto.randomUUID()
-  await new AccountRepository(createDb(env)).insert({
+  await new AccountRepository(env).insert({
     id,
     mcp: "calendar",
     slug: "personal",

@@ -1,27 +1,14 @@
 import { Buffer } from "node:buffer"
-import { createCipheriv, randomBytes } from "node:crypto"
+import { randomBytes } from "node:crypto"
 
 import { describe, expect, it } from "vitest"
 
-import { CredentialDecryptError, CryptoConfigError, TokenCipher, type TokenField } from "../../src/auth/crypto"
+import { CredentialDecryptError, CryptoConfigError, TokenCipher } from "../../src/auth/crypto"
 import { fromBase64Url, toBase64Url } from "../../src/lib/base64url"
 
 const KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 const ACCOUNT = "11111111-1111-1111-1111-111111111111"
 const cipher = new TokenCipher(KEY)
-
-/**
- * The layout the v1 Web Crypto implementation wrote: 12-byte IV, then ciphertext with the
- * 16-byte GCM tag appended. GCM output is implementation-independent, so minting the bytes
- * here still proves the read path accepts what is already stored.
- */
-function v1Envelope(plaintext: string, field: TokenField = "access_token"): string {
-  const iv = randomBytes(12)
-  const writer = createCipheriv("aes-256-gcm", Buffer.from(KEY, "base64"), iv)
-  writer.setAAD(Buffer.from(`${ACCOUNT}:${field}`))
-  const body = Buffer.concat([writer.update(plaintext, "utf8"), writer.final(), writer.getAuthTag()])
-  return `v1.${toBase64Url(iv)}.${toBase64Url(body)}`
-}
 
 describe("credential encryption", () => {
   it("round-trips a token and uses a fresh IV per encryption", async () => {
@@ -34,11 +21,9 @@ describe("credential encryption", () => {
     await expect(cipher.decrypt(first, ACCOUNT, "access_token")).resolves.toBe("ya29.secret")
   })
 
-  it("reads a v1 envelope written before the switch", async () => {
-    await expect(cipher.decrypt(v1Envelope("ya29.legacy"), ACCOUNT, "access_token")).resolves.toBe("ya29.legacy")
-    await expect(cipher.decrypt(v1Envelope("refresh-legacy", "refresh_token"), ACCOUNT, "refresh_token")).resolves.toBe(
-      "refresh-legacy"
-    )
+  it("refuses a v1 envelope instead of reading a deprecated layout", async () => {
+    const envelope = `v1.${toBase64Url(randomBytes(12))}.${toBase64Url(randomBytes(32))}`
+    await expect(cipher.decrypt(envelope, ACCOUNT, "access_token")).rejects.toThrow(CredentialDecryptError)
   })
 
   it("rejects a tampered ciphertext", async () => {
@@ -82,8 +67,7 @@ describe("credential encryption", () => {
       CryptoConfigError
     )
     await expect(new TokenCipher("c2hvcnQ=").encrypt("x", ACCOUNT, "access_token")).rejects.toThrow(CryptoConfigError)
-    await expect(new TokenCipher("").decrypt(v1Envelope("ya29.legacy"), ACCOUNT, "access_token")).rejects.toThrow(
-      CryptoConfigError
-    )
+    const envelope = await cipher.encrypt("ya29.secret", ACCOUNT, "access_token")
+    await expect(new TokenCipher("").decrypt(envelope, ACCOUNT, "access_token")).rejects.toThrow(CryptoConfigError)
   })
 })

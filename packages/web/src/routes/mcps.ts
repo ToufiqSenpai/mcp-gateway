@@ -4,7 +4,6 @@ import { env } from "cloudflare:workers"
 import { Hono } from "hono"
 
 import { createMcpContext } from "../accounts/lifecycle"
-import { createDb } from "../db/client"
 import type { Env } from "../env"
 import { isMcpSlug, MCP_REGISTRY } from "../mcps/registry"
 
@@ -34,7 +33,7 @@ mcpRoutes.post("/:slug", async c => {
 
   const { factory } = MCP_REGISTRY[slug]
   const handler = createMcpHandler(
-    () => factory(createMcpContext(c.env, createDb(c.env), slug, promise => c.executionCtx.waitUntil(promise))),
+    () => factory(createMcpContext(c.env, slug, promise => c.executionCtx.waitUntil(promise))),
     { legacy: "reject", responseMode: "json" }
   )
   return handler.fetch(c.req.raw, { parsedBody: c.get("parsedBody") })

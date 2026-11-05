@@ -2,7 +2,6 @@ import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, type CallToolResult, type JSONValue, type Tool } from "@modelcontextprotocol/server"
 
 import { createMcpContext } from "../accounts/lifecycle"
-import type { Database } from "../db/client"
 import type { McpSlug } from "../db/schema"
 import type { Env } from "../env"
 import { MCP_REGISTRY } from "./registry"
@@ -15,10 +14,7 @@ type ToolArguments = Record<string, JSONValue>
  * uses. No self-fetch, so the Worker never needs to store a service token for itself.
  */
 export class InProcessRunner {
-  public constructor(
-    private readonly env: Env,
-    private readonly db: Database
-  ) {}
+  public constructor(private readonly env: Env) {}
 
   public listTools(mcp: McpSlug): Promise<Tool[]> {
     return this.withClient(mcp, async client => (await client.listTools()).tools)
@@ -29,7 +25,7 @@ export class InProcessRunner {
   }
 
   private async withClient<T>(mcp: McpSlug, run: (client: Client) => Promise<T>): Promise<T> {
-    const server = MCP_REGISTRY[mcp].factory(createMcpContext(this.env, this.db, mcp))
+    const server = MCP_REGISTRY[mcp].factory(createMcpContext(this.env, mcp))
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     await server.connect(serverTransport)
 
@@ -44,16 +40,10 @@ export class InProcessRunner {
   }
 }
 
-export function listTools(env: Env, db: Database, mcp: McpSlug): Promise<Tool[]> {
-  return new InProcessRunner(env, db).listTools(mcp)
+export function listTools(env: Env, mcp: McpSlug): Promise<Tool[]> {
+  return new InProcessRunner(env).listTools(mcp)
 }
 
-export function callTool(
-  env: Env,
-  db: Database,
-  mcp: McpSlug,
-  name: string,
-  args: ToolArguments
-): Promise<CallToolResult> {
-  return new InProcessRunner(env, db).callTool(mcp, name, args)
+export function callTool(env: Env, mcp: McpSlug, name: string, args: ToolArguments): Promise<CallToolResult> {
+  return new InProcessRunner(env).callTool(mcp, name, args)
 }

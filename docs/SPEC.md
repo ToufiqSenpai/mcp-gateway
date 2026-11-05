@@ -41,7 +41,7 @@ One Worker, one deployable. A pnpm workspace splits the code into one Worker pac
 one library per MCP.
 
 ```
-Client ──CF-Access-Client-*──► /mcps/:slug ──► registry ──► createServer(ctx)
+Client ──CF-Access-Client-*──► /mcps/:slug ──► registry ──► CalendarServer/NotesServer
 Browser ──Access session────► /admin*, /oauth/* ──► admin router
 ```
 
@@ -53,7 +53,7 @@ Browser ──Access session────► /admin*, /oauth/* ──► admin ro
 | `packages/calendar` | library | `calendar` MCP: tools, resources, prompts, Google client seam |
 | `packages/notes` | library | `notes` MCP: tools, resources, Microsoft Graph client seam |
 
-**Package boundary.** An MCP package never imports D1, `arctic`, or the encryption
+**Package boundary.** An MCP package never imports D1, the OAuth client, or the encryption
 module. It receives:
 
 ```ts
@@ -73,8 +73,8 @@ interface McpContext {
 Accounts, Credentials, refresh and the registry stay in `packages/web`. This is what makes
 an MCP package testable without a database (ADR-0006). The interface is the contract: the
 Worker's `GatewayMcpContext` implements it without adding members, and each package mirrors
-it exactly (asserted at compile time). `createServer(ctx)` is a thin adapter over
-`CalendarServer` / `NotesServer`; internal collaborators are classes (ADR-0007).
+it exactly (asserted at compile time). `CalendarServer` / `NotesServer` assemble their
+package's tools, resources and prompts; internal collaborators are classes (ADR-0007).
 
 **Registry.** `packages/web/src/mcps/registry.ts` is the only map from slug to factory;
 `McpRegistry` is a lookup facade over that const, not a second map. A test asserts its keys
@@ -110,7 +110,6 @@ in CI rather than at runtime.
 | `@modelcontextprotocol/client` | 2.4.0 | in-process MCP client for the admin test panel |
 | `@modelcontextprotocol/core` | 2.4.0 | transitive; schema types |
 | `zod` | 4.6 | tool input schemas, env validation |
-| `arctic` | 3.7 | OAuth authorize / exchange / refresh on Workers (ADR-0005) |
 | `@googleapis/calendar` | 20.1.0 | type-only: request/response shapes |
 | `gaxios` | 7.3.1 | installed by the Google client, not used at runtime |
 | `@microsoft/msgraph-sdk` | 1.0.0-preview.92 | `GraphRequestAdapter` + `createGraphServiceClient`; all OneNote calls and paging |
@@ -166,9 +165,9 @@ packages/
       mcps/registry.ts         # slug -> factory, the only MCP list + McpRegistry facade
       mcps/{context,pagination,cache,in-process}.ts
                                # interface + HmacCursorCodec, EnumerationCache, InProcessRunner
-      db/{schema.ts,client.ts,queries.ts,account-repository.ts}
-      auth/{access.ts,arctic.ts,crypto.ts,scopes.ts}
-                               # AccessVerifier, TokenCipher, Required scope sets + coverage
+      db/{schema.ts,client.ts,account-repository.ts,oauth-state-repository.ts}
+      auth/{access.ts,crypto.ts,oauth.ts,scopes.ts}
+                               # AccessVerifier, TokenCipher, OAuthProvider, scope sets + coverage
       lib/base64url.ts         # shared base64url codec: envelope, cursor, CSRF token
       accounts/{lifecycle.ts,refresh.ts,lifecycle-oauth.ts,errors.ts,gateway-context.ts}
                                # AccountService, RefreshService, OAuthFlowService
@@ -177,13 +176,13 @@ packages/
   calendar/
     package.json  tsconfig.json  vitest.config.ts
     src/{index.ts,server.ts,client.ts,tools/,resources.ts,prompts.ts}
-      server.ts                # CalendarServer + createServer adapter
+      server.ts                # CalendarServer
       client.ts                # GoogleCalendarClient + resource classes
       tools/{index,helpers,tool-context,registry}.ts
   notes/
     package.json  tsconfig.json  vitest.config.ts
     src/{index.ts,server.ts,client.ts,tools/,resources.ts}
-      server.ts                # NotesServer + createServer adapter
+      server.ts                # NotesServer
       tools/{index,helpers,tool-context,registry}.ts
 ```
 
@@ -333,21 +332,20 @@ admin page shows a "dev auth bypass" banner. A test asserts the bypass is unreac
    `^[a-z0-9][a-z0-9-]{0,31}$`, unique per MCP. `?account=<slug>` turns the same flow into
    a reauth of an existing Account.
 2. The gateway writes an `oauth_states` row (`state` = 32 random bytes base64url,
-   `code_verifier` from `arctic.generateCodeVerifier()`, `mcp`, `provider`, `slug`,
+   `code_verifier` from `OAuthAttempt` (32 random bytes base64url), `mcp`, `provider`, `slug`,
    `target_account_id`, `created_at`, `expires_at` = +10 min) and sets an `oauth_flow`
    cookie: `HttpOnly`, `Secure`, `SameSite=Lax`, 10-minute lifetime, value = `state`. The
    cookie is the login-CSRF binding.
-3. Redirect to the `arctic` authorize URL, **patched before redirect**:
-   - Google: `access_type=offline` always and `prompt=consent` always (also on reauth).
-     `arctic@3.7` adds neither; without `access_type=offline` Google issues no refresh
-     token at all.
+3. Redirect to the authorize URL built by `OAuthProvider`, **patched before redirect**:
+   - Google: `access_type=offline` always and `prompt=consent` always (also on reauth);
+     without `access_type=offline` Google issues no refresh token at all.
    - Microsoft: the scope list always includes `offline_access`.
 4. Callback: `/oauth/callback/<provider>`. The Provider comes from the path segment;
    `mcp`, `slug` and `target_account_id` come from the state row, never from the path.
 5. Validate: cookie `oauth_flow` === `state` query param; state row exists and is
    unexpired; then `DELETE … RETURNING` it (single use). Any miss → `?error=state`.
 6. `error=access_denied` or any other `error` param → `?error=denied`, nothing written.
-7. Exchange `code` + `code_verifier` via `arctic.validateAuthorizationCode()`. **No refresh
+7. Exchange `code` + `code_verifier` via `OAuthProvider.exchangeCode()`. **No refresh
    token in the response → reject** (`?error=no_refresh_token`); never store a
    half-usable Account.
 8. Fetch the Provider identity once: Google `/userinfo` (`sub`, `email`, `name`),
@@ -373,17 +371,17 @@ and callback; Access is not the login-CSRF defence.
 
 | Transition | Trigger |
 | --- | --- |
-| `active → needs_reauth` | `OAuth2RequestError` with `invalid_grant` (Microsoft: `invalid_grant` / `interaction_required`), or the Granted scope set losing coverage (§9) |
+| `active → needs_reauth` | `OAuthTokenError` with `invalid_grant` (Microsoft: `invalid_grant` / `interaction_required`), or the Granted scope set losing coverage (§9) |
 | `needs_reauth → active` | successful reauth |
 | `active \| needs_reauth → revoked` | admin action |
 | `revoked → active` | successful reauth |
 
-Revoking is best-effort `revokeToken()` at the Provider (Google only; `arctic` has no
-Microsoft equivalent), sets both ciphertexts to `NULL`, sets `revoked_at` and clears
+Revoking is best-effort `OAuthProvider.revoke()` at the Provider (Google has an endpoint;
+the Microsoft client is a no-op), sets both ciphertexts to `NULL`, sets `revoked_at` and clears
 `is_default`. The row, slug and Provider identity stay reserved. There is no hard delete in
 v1.
 
-Transient refresh failures (5xx, `ArcticFetchError`, timeout) never change `state`; they
+Transient refresh failures (5xx, network error, timeout) never change `state`; they
 record `last_error` and leave the Account `active`. A `401` from the Provider **after** a
 successful refresh is a scope/permission problem, not a dead refresh token: `state` stays
 `active` and the error passes through.
@@ -422,8 +420,7 @@ instead of claiming there is no default (drift recorded during build).
   generic `500` (detail only in logs). Never a plaintext fallback, never a runtime-generated
   key.
 - AES-256-GCM via `node:crypto`, 12-byte random IV per encryption, envelope
-  `v2.<iv>.<ciphertext||tag>` with base64url segments. A `v1` envelope written by the
-  earlier Web Crypto implementation stays readable until a refresh rewrites the row.
+  `v2.<iv>.<ciphertext||tag>` with base64url segments. There is no v1 read path.
 - AAD = `"<account_id>:<field>"`, `field` ∈ `access_token` | `refresh_token`, so a
   ciphertext cannot be replayed into another row or column.
 - Encrypted: `access_token`, `refresh_token`. Plaintext: expiry, scopes, email, state and
@@ -502,7 +499,7 @@ Algorithm:
    `access_token_expires_at` advanced, use the new token. If the lock is gone but nothing
    advanced, try to claim it. If still locked at the deadline, use the current token while
    it is still valid, else return a retryable error.
-4. With the lock: `arctic.refreshAccessToken(decrypt(refresh_token))`. A returned refresh
+4. With the lock: `OAuthProvider.refreshTokens(decrypt(refresh_token))`. A returned refresh
    token **replaces** the stored one; when the Provider omits it, the old one is kept.
 5. Persist in one statement, conditioned on the lock token, which also releases the lock:
    `UPDATE accounts SET access_token = ?, refresh_token = ?, access_token_expires_at = ?, last_refreshed_at = ?, refresh_lock_until = NULL, refresh_lock_token = NULL WHERE id = ? AND refresh_lock_token = ?`.

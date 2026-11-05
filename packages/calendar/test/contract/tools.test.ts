@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { createServer } from "../../src/server"
+import { CalendarServer } from "../../src/server"
 import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
 
 interface PropertySchema {
@@ -25,7 +25,7 @@ interface ToolListing {
   annotations?: Record<string, boolean>
 }
 
-async function listTools(server = createServer(stubContext)): Promise<ToolListing[]> {
+async function listTools(server = new CalendarServer(stubContext).build()): Promise<ToolListing[]> {
   const reply = await call(server, { method: "tools/list", params: {} })
   return asReply<ToolListing[]>(reply.result?.["tools"])
 }
@@ -108,7 +108,7 @@ describe("calendar tool contract", () => {
   })
 
   it("answers an unknown tool with -32602", async () => {
-    const reply = await call(createServer(stubContext), {
+    const reply = await call(new CalendarServer(stubContext).build(), {
       method: "tools/call",
       params: { name: "not_a_tool", arguments: {} }
     })
@@ -116,7 +116,7 @@ describe("calendar tool contract", () => {
   })
 
   it('returns every successful result as resultType "complete" with cache hints', async () => {
-    const reply = await call(createServer(stubContext), { method: "tools/list", params: {} })
+    const reply = await call(new CalendarServer(stubContext).build(), { method: "tools/list", params: {} })
     expect(reply.result?.["resultType"]).toBe("complete")
     expect(reply.result?.["ttlMs"]).toBe(3_600_000)
     expect(reply.result?.["cacheScope"]).toBe("public")

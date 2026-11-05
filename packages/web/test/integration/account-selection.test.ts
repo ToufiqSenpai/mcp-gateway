@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest"
 
 import { createMcpContext } from "../../src/accounts/lifecycle"
 import { AccountRepository } from "../../src/db/account-repository"
-import { createDb } from "../../src/db/client"
 import type { NewAccount } from "../../src/db/schema"
 
 let counter = 0
@@ -34,7 +33,7 @@ function account(overrides: Partial<NewAccount> = {}): NewAccount {
 }
 
 async function insert(row: NewAccount): Promise<void> {
-  await new AccountRepository(createDb(env)).insert(row)
+  await new AccountRepository(env).insert(row)
 }
 
 beforeEach(async () => {
@@ -47,7 +46,7 @@ describe("Account selection", () => {
     await insert(account({ slug: "personal", isDefault: 1 }))
     await insert(account({ slug: "work" }))
 
-    const ctx = createMcpContext(env, createDb(env), "calendar")
+    const ctx = createMcpContext(env, "calendar")
     const accounts = await ctx.listAccounts()
     expect(accounts).toEqual([
       { slug: "personal", isDefault: true },
@@ -60,7 +59,7 @@ describe("Account selection", () => {
     await insert(account({ slug: "personal", isDefault: 1, state: "needs_reauth" }))
     await insert(account({ slug: "work" }))
 
-    const ctx = createMcpContext(env, createDb(env), "calendar")
+    const ctx = createMcpContext(env, "calendar")
     await expect(ctx.getAccessToken("personal")).rejects.toThrow(/personal/)
     await expect(ctx.getAccessToken("personal")).rejects.toThrow(/\/admin\/mcps\/calendar/)
     await expect(ctx.getAccessToken("personal")).rejects.toThrow(/needs_reauth/)
@@ -68,17 +67,16 @@ describe("Account selection", () => {
 
   it("fails on an unknown slug and names it", async () => {
     await insert(account({ slug: "personal", isDefault: 1 }))
-    const ctx = createMcpContext(env, createDb(env), "calendar")
+    const ctx = createMcpContext(env, "calendar")
     await expect(ctx.getAccessToken("ghost")).rejects.toThrow(/ghost/)
   })
 
   it("demotes an Account whose stored scopes no longer cover the Required set", async () => {
     await insert(account({ slug: "personal", isDefault: 1, scopes: "openid email profile" }))
-    const db = createDb(env)
-    const ctx = createMcpContext(env, db, "calendar")
+    const ctx = createMcpContext(env, "calendar")
 
     await expect(ctx.getAccessToken("personal")).rejects.toThrow(/missing_scope/)
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("needs_reauth")
     expect(row?.lastError).toBe("missing_scope")
   })
@@ -86,15 +84,14 @@ describe("Account selection", () => {
   it("keeps exactly one default per MCP and moves it in one batch", async () => {
     await insert(account({ slug: "personal", isDefault: 1 }))
     await insert(account({ slug: "work" }))
-    const db = createDb(env)
-    const work = await new AccountRepository(db).findBySlug("calendar", "work")
+    const work = await new AccountRepository(env).findBySlug("calendar", "work")
     if (!work) throw new Error("missing")
 
-    await new AccountRepository(db).setDefault("calendar", work.id)
+    await new AccountRepository(env).setDefault("calendar", work.id)
 
-    const personal = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const personal = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(personal?.isDefault).toBe(0)
-    expect((await new AccountRepository(db).findBySlug("calendar", "work"))?.isDefault).toBe(1)
+    expect((await new AccountRepository(env).findBySlug("calendar", "work"))?.isDefault).toBe(1)
   })
 
   it("reports per-state counts for the admin list", async () => {
@@ -102,19 +99,18 @@ describe("Account selection", () => {
     await insert(account({ slug: "b", state: "needs_reauth" }))
     await insert(account({ slug: "c", state: "revoked" }))
 
-    const counts = await new AccountRepository(createDb(env)).countByState("calendar")
+    const counts = await new AccountRepository(env).countByState("calendar")
     expect(counts).toEqual({ active: 1, needs_reauth: 1, revoked: 1 })
   })
 
   it("bumps cache_epoch on a state change", async () => {
     await insert(account({ slug: "a" }))
-    const db = createDb(env)
-    const row = await new AccountRepository(db).findBySlug("calendar", "a")
+    const row = await new AccountRepository(env).findBySlug("calendar", "a")
     if (!row) throw new Error("missing")
 
-    await new AccountRepository(db).update(row.id, { state: "needs_reauth" })
+    await new AccountRepository(env).update(row.id, { state: "needs_reauth" })
 
-    await new AccountRepository(db).bumpCacheEpoch(row.id)
-    expect((await new AccountRepository(db).findBySlug("calendar", "a"))?.cacheEpoch).toBe(1)
+    await new AccountRepository(env).bumpCacheEpoch(row.id)
+    expect((await new AccountRepository(env).findBySlug("calendar", "a"))?.cacheEpoch).toBe(1)
   })
 })

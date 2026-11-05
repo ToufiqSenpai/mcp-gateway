@@ -1,6 +1,6 @@
 export type { CursorCodec, CursorPayload, McpContext } from "./context"
 export type { ResourceListing, ResourceSource } from "./resources"
-export { buildServer, type ServerOptions } from "./server"
+export { McpServerBuilder } from "./server"
 export {
   collectAcrossAccounts,
   defineTool,

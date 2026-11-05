@@ -1,36 +1,27 @@
-import { buildServer, type McpContext } from "@mcp-gateway/common"
-import { McpServer } from "@modelcontextprotocol/server"
+import { McpServerBuilder, type McpContext } from "@mcp-gateway/common"
 
 import { GraphError } from "./client"
 import { NotebookResourceRegistry } from "./resources"
 import { notesTools } from "./tools"
 import { ToolContext } from "./tools/tool-context"
 
-/** One short line: a raw Graph body never becomes a tool error. */
-function toolErrorMessage(error: Error): string {
-  if (error instanceof GraphError) {
-    return `${error.code}: ${error.message}`.slice(0, 300)
-  }
-  const firstLine = error.message.split(/\r?\n/)[0]
-  return (firstLine ?? "Tool call failed").slice(0, 300)
-}
-
 /** One per request: builds a fresh MCP server over the request's context. */
-export class NotesServer {
-  public constructor(private readonly ctx: McpContext) {}
+export class NotesServer extends McpServerBuilder<ToolContext> {
+  protected readonly name = "notes"
+  protected readonly tools = notesTools
+  protected readonly resources: NotebookResourceRegistry
 
-  public build(): McpServer {
-    const context = new ToolContext(this.ctx)
-    return buildServer({
-      name: "notes",
-      tools: notesTools,
-      context,
-      formatError: toolErrorMessage,
-      resources: new NotebookResourceRegistry(context)
-    })
+  public constructor(mcp: McpContext) {
+    super(new ToolContext(mcp))
+    this.resources = new NotebookResourceRegistry(this.context)
   }
-}
 
-export function createServer(ctx: McpContext): McpServer {
-  return new NotesServer(ctx).build()
+  /** One short line: a raw Graph body never becomes a tool error. */
+  protected formatError(error: Error): string {
+    if (error instanceof GraphError) {
+      return `${error.code}: ${error.message}`.slice(0, 300)
+    }
+    const firstLine = error.message.split(/\r?\n/)[0]
+    return (firstLine ?? "Tool call failed").slice(0, 300)
+  }
 }

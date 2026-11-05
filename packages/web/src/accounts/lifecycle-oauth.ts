@@ -1,12 +1,11 @@
-import { generateCodeVerifier, generateState, type OAuth2Tokens } from "arctic"
 import { z } from "zod"
 
-import { authorizeUrl, callbackUri, providerClient } from "../auth/arctic"
 import { TokenCipher } from "../auth/crypto"
-import { covers, grantedScopes, parseScopes, requiredScopes } from "../auth/scopes"
+import { callbackUri, OAuthAttempt, OAuthProvider, type OAuthTokens } from "../auth/oauth"
+import { covers, parseScopes, requiredScopes } from "../auth/scopes"
 import { AccountRepository } from "../db/account-repository"
-import type { Database } from "../db/client"
 import { nowSeconds } from "../db/client"
+import { OAuthStateRepository } from "../db/oauth-state-repository"
 import type { Account, McpSlug, Provider } from "../db/schema"
 import type { Env } from "../env"
 
@@ -118,41 +117,43 @@ async function fetchIdentity(provider: Provider, accessToken: string): Promise<P
 /** Start and finish an OAuth authorization against one MCP's Provider. */
 export class OAuthFlowService {
   private readonly cipher: TokenCipher
+  private readonly accounts: AccountRepository
+  private readonly states: OAuthStateRepository
 
-  public constructor(
-    private readonly env: Env,
-    private readonly repository: AccountRepository
-  ) {
+  public constructor(private readonly env: Env) {
     this.cipher = new TokenCipher(env.TOKEN_ENCRYPTION_KEY)
+    this.accounts = new AccountRepository(env)
+    this.states = new OAuthStateRepository(env)
   }
 
   /** Writes the single-use attempt and returns where to send the browser. */
   public async start(input: StartFlowInput): Promise<StartedFlow> {
     if (!AccountSlug.safeParse(input.slug).success) throw new Error("Invalid account slug")
 
-    const existing = await this.repository.findBySlug(input.mcp, input.slug)
+    const existing = await this.accounts.findBySlug(input.mcp, input.slug)
     if (!input.targetAccountId && existing) throw new SlugTakenError()
 
-    const state = generateState()
-    const codeVerifier = generateCodeVerifier()
+    const attempt = OAuthAttempt.create()
     const now = nowSeconds()
 
-    await this.repository.insertOAuthState({
-      state,
+    await this.states.insert({
+      state: attempt.state,
       mcp: input.mcp,
       provider: input.provider,
       slug: input.slug,
-      codeVerifier,
+      codeVerifier: attempt.codeVerifier,
       targetAccountId: input.targetAccountId ?? null,
       createdAt: now,
       expiresAt: now + STATE_TTL_SECONDS
     })
 
-    const client = providerClient(this.env, input.provider, callbackUri(input.requestUrl, input.provider))
-    return {
-      state,
-      authorizeUrl: authorizeUrl(client, input.provider, state, codeVerifier, input.mcp).href
-    }
+    const url = OAuthProvider.for(this.env, input.provider).authorizeUrl({
+      state: attempt.state,
+      codeChallenge: await attempt.challenge(),
+      redirectUri: callbackUri(input.requestUrl, input.provider),
+      scopes: requiredScopes(input.mcp)
+    })
+    return { state: attempt.state, authorizeUrl: url.href }
   }
 
   /**
@@ -160,48 +161,52 @@ export class OAuthFlowService {
    * then the write. Any refusal leaves the database untouched.
    */
   public async complete(input: CallbackInput): Promise<CallbackOutcome> {
-    const attempt = await this.repository.takeOAuthState(input.state)
+    const attempt = await this.states.take(input.state)
     if (!attempt || attempt.expiresAt < nowSeconds() || attempt.provider !== input.provider) {
       return { mcp: attempt?.mcp ?? "calendar", error: "state" }
     }
 
     const mcp = attempt.mcp
     const required = requiredScopes(mcp)
-    const client = providerClient(this.env, attempt.provider, callbackUri(input.requestUrl, input.provider))
 
-    let tokens: OAuth2Tokens
+    let tokens: OAuthTokens
     try {
-      tokens = await client.validateAuthorizationCode(input.code, attempt.codeVerifier)
+      tokens = await OAuthProvider.for(this.env, attempt.provider).exchangeCode({
+        code: input.code,
+        codeVerifier: attempt.codeVerifier,
+        redirectUri: callbackUri(input.requestUrl, input.provider)
+      })
     } catch {
       return { mcp, error: "denied" }
     }
 
-    if (!tokens.hasRefreshToken()) return { mcp, error: "no_refresh_token" }
+    const refreshToken = tokens.refreshToken
+    if (refreshToken === undefined) return { mcp, error: "no_refresh_token" }
 
-    const scopes = grantedScopes(tokens)
+    const scopes = tokens.scopes ?? []
     if (!covers(scopes, required)) return { mcp, error: "missing_scope" }
 
     let identity: ProviderIdentity
     try {
-      identity = await fetchIdentity(attempt.provider, tokens.accessToken())
+      identity = await fetchIdentity(attempt.provider, tokens.accessToken)
     } catch {
       return { mcp, error: "denied" }
     }
 
-    const duplicate = await this.repository.findByIdentity(mcp, attempt.provider, identity.subject)
+    const duplicate = await this.accounts.findByIdentity(mcp, attempt.provider, identity.subject)
     if (duplicate && duplicate.id !== attempt.targetAccountId) {
       return { mcp, error: "duplicate", duplicateSlug: duplicate.slug }
     }
 
     if (attempt.targetAccountId) {
-      const target = await this.repository.findById(attempt.targetAccountId)
+      const target = await this.accounts.findById(attempt.targetAccountId)
       if (!target) return { mcp, error: "state" }
       // A reauth must never narrow a working Credential.
       if (!covers(scopes, required) || !covers(parseScopes(target.scopes), scopes)) {
         return { mcp, error: "missing_scope" }
       }
       try {
-        await this.applyReauth(target, identity, tokens, scopes)
+        await this.applyReauth(target, identity, tokens, scopes, refreshToken)
       } catch (error) {
         if (error instanceof IdentityMismatchError) return { mcp, error: "identity_mismatch" }
         if (error instanceof RetryableContentionError) return { mcp, error: "state" }
@@ -210,7 +215,7 @@ export class OAuthFlowService {
       return { mcp, addedSlug: target.slug }
     }
 
-    const slugTaken = await this.repository.findBySlug(mcp, attempt.slug)
+    const slugTaken = await this.accounts.findBySlug(mcp, attempt.slug)
     if (slugTaken) return { mcp, error: "slug_taken" }
 
     try {
@@ -220,7 +225,8 @@ export class OAuthFlowService {
         provider: attempt.provider,
         identity,
         tokens,
-        scopes
+        scopes,
+        refreshToken
       })
     } catch (error) {
       if (error instanceof Error && /UNIQUE/i.test(error.message)) {
@@ -237,17 +243,18 @@ export class OAuthFlowService {
     slug: string
     provider: Provider
     identity: ProviderIdentity
-    tokens: OAuth2Tokens
+    tokens: OAuthTokens
     scopes: string[]
+    refreshToken: string
   }): Promise<void> {
     const id = crypto.randomUUID()
     const now = nowSeconds()
     const [accessToken, refreshToken] = await Promise.all([
-      this.cipher.encrypt(input.tokens.accessToken(), id, "access_token"),
-      this.cipher.encrypt(input.tokens.refreshToken(), id, "refresh_token")
+      this.cipher.encrypt(input.tokens.accessToken, id, "access_token"),
+      this.cipher.encrypt(input.refreshToken, id, "refresh_token")
     ])
 
-    await this.repository.insert({
+    await this.accounts.insert({
       id,
       mcp: input.mcp,
       slug: input.slug,
@@ -257,7 +264,7 @@ export class OAuthFlowService {
       displayName: input.identity.displayName ?? null,
       accessToken,
       refreshToken,
-      accessTokenExpiresAt: Math.floor(input.tokens.accessTokenExpiresAt().getTime() / 1000),
+      accessTokenExpiresAt: input.tokens.expiresAt,
       scopes: input.scopes.join(" "),
       state: "active",
       isDefault: 0,
@@ -267,52 +274,45 @@ export class OAuthFlowService {
       updatedAt: now
     })
 
-    await this.repository.makeDefaultIfNone({ id, mcp: input.mcp })
-    await this.repository.bumpCacheEpoch(id)
+    await this.accounts.makeDefaultIfNone({ id, mcp: input.mcp })
+    await this.accounts.bumpCacheEpoch(id)
   }
 
   private async applyReauth(
     account: Account,
     identity: { subject: string },
-    tokens: OAuth2Tokens,
-    scopes: string[]
+    tokens: OAuthTokens,
+    scopes: string[],
+    newRefreshToken: string
   ): Promise<void> {
     if (identity.subject !== account.providerSubject) throw new IdentityMismatchError()
 
     // The same lease the refresh path uses, so a reauth can never overwrite a token mid-rotation.
     const lockToken = crypto.randomUUID()
-    if (!(await this.repository.claimRefreshLock(account.id, lockToken))) {
+    if (!(await this.accounts.claimRefreshLock(account.id, lockToken))) {
       throw new RetryableContentionError()
     }
 
     try {
-      const [accessToken, refreshToken] = await Promise.all([
-        this.cipher.encrypt(tokens.accessToken(), account.id, "access_token"),
-        this.cipher.encrypt(tokens.refreshToken(), account.id, "refresh_token")
+      const [accessToken, encryptedRefreshToken] = await Promise.all([
+        this.cipher.encrypt(tokens.accessToken, account.id, "access_token"),
+        this.cipher.encrypt(newRefreshToken, account.id, "refresh_token")
       ])
-      await this.repository.update(account.id, {
+      await this.accounts.update(account.id, {
         accessToken,
-        refreshToken,
-        accessTokenExpiresAt: Math.floor(tokens.accessTokenExpiresAt().getTime() / 1000),
+        refreshToken: encryptedRefreshToken,
+        accessTokenExpiresAt: tokens.expiresAt,
         scopes: scopes.join(" "),
         state: "active",
         lastRefreshedAt: nowSeconds(),
         lastError: null,
         revokedAt: null
       })
-      await this.repository.releaseRefreshLock(account.id, lockToken)
-      await this.repository.bumpCacheEpoch(account.id)
+      await this.accounts.releaseRefreshLock(account.id, lockToken)
+      await this.accounts.bumpCacheEpoch(account.id)
     } catch (error) {
-      await this.repository.releaseRefreshLock(account.id, lockToken)
+      await this.accounts.releaseRefreshLock(account.id, lockToken)
       throw error
     }
   }
-}
-
-export function startAuthorization(env: Env, db: Database, input: StartFlowInput): Promise<StartedFlow> {
-  return new OAuthFlowService(env, new AccountRepository(db)).start(input)
-}
-
-export function completeAuthorization(env: Env, db: Database, input: CallbackInput): Promise<CallbackOutcome> {
-  return new OAuthFlowService(env, new AccountRepository(db)).complete(input)
 }

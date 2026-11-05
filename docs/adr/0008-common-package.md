@@ -13,7 +13,7 @@ packages independent; the cost was fixing every framework bug twice.
 - `defineTool`, `ToolResult`, `paginate`, `collectAcrossAccounts` and their types
 - `ToolContext`, the base carrying account resolution, selection and enumeration
 - `ToolRegistry`
-- `buildServer` plus the `ResourceListing` / `ResourceSource` contract
+- `McpServerBuilder` plus the `ResourceListing` / `ResourceSource` contract
 
 It owns nothing Provider-specific: clients, mappers, Zod schemas, prompts, resource
 registries, OAuth and D1 all stay in their packages. `common` imports only `zod` and

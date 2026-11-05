@@ -2,7 +2,7 @@ import { env } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
 
 import { TEST_ORIGIN, TestBrowser, adminJwt, appFetch, csrfFromPage } from "../support/access"
-import { CODE } from "../support/providers"
+import { CODE, lastTokenRequest } from "../support/providers"
 
 interface AccountRow {
   slug: string
@@ -67,6 +67,11 @@ describe("adding a Google Account", () => {
     expect(row?.access_token).toMatch(/^v2\.[A-Za-z0-9_-]{16}\./)
     expect(row?.access_token).not.toContain("ya29")
     expect(row?.refresh_token).not.toContain("refresh-one")
+
+    // The native OAuth client sends PKCE and the registered redirect URI.
+    expect(lastTokenRequest.body?.get("grant_type")).toBe("authorization_code")
+    expect(lastTokenRequest.body?.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(lastTokenRequest.body?.get("redirect_uri")).toBe(`${TEST_ORIGIN}/oauth/callback/google`)
 
     // The state row is consumed in the statement that validates it.
     const remaining = await env.DB.prepare("SELECT count(*) AS count FROM oauth_states").first<{

@@ -14,7 +14,6 @@
     "@mcp-gateway/notes": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/hono": "2.0.2",
-    "arctic": "3.7.0",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.16",
     "jose": "6.2.15"

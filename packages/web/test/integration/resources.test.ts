@@ -5,7 +5,7 @@ import { z } from "zod"
 
 import { TokenCipher } from "../../src/auth/crypto"
 import { AccountRepository } from "../../src/db/account-repository"
-import { createDb, nowSeconds } from "../../src/db/client"
+import { nowSeconds } from "../../src/db/client"
 import { counters, resetProviderCounters } from "../support/providers"
 import { rpc } from "../support/rpc"
 
@@ -56,9 +56,7 @@ const ToolCallResult = z
   })
   .loose()
 
-const CalendarListBody = z
-  .object({ calendars: z.array(z.object({ summary: z.string().optional() }).loose()) })
-  .loose()
+const CalendarListBody = z.object({ calendars: z.array(z.object({ summary: z.string().optional() }).loose()) }).loose()
 
 async function seedAccount(
   state: "active" | "needs_reauth" = "active",
@@ -68,7 +66,7 @@ async function seedAccount(
   isDefault = 1
 ): Promise<string> {
   const id = crypto.randomUUID()
-  await new AccountRepository(createDb(env)).insert({
+  await new AccountRepository(env).insert({
     id,
     mcp: "calendar",
     slug,
@@ -197,7 +195,7 @@ describe("calendar resources", () => {
     await rpc({ method: "resources/list", params: {} })
     expect(counters.googleCalendarListRequests).toBe(1)
 
-    await new AccountRepository(createDb(env)).update(id, { cacheEpoch: 1 })
+    await new AccountRepository(env).update(id, { cacheEpoch: 1 })
     await rpc({ method: "resources/list", params: {} })
     expect(counters.googleCalendarListRequests).toBe(2)
   })

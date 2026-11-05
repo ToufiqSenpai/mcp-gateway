@@ -1,5 +1,5 @@
 export type { McpContext } from "@mcp-gateway/common"
-export { createServer } from "./server"
+export { NotesServer } from "./server"
 
 /**
  * The Required scope set for the `notes` MCP. One constant for the authorize URL, the

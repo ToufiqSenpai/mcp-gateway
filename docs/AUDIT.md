@@ -33,7 +33,7 @@
 `UnusableAccountError`/`UnusableReason` re-export, `REQUIRED_SCOPE_STRING` (both packages),
 `ProviderFailure` and its fallback in `providerErrorCode` (only `GoogleApiError` is ever
 thrown there), the `googleCalendar()` wrapper, the `cached` result flag, `fetchedAt` in the
-KV value, and the `list:` callback on both `ResourceTemplate`s — `buildServer` replaces the
+KV value, and the `list:` callback on both `ResourceTemplate`s — `McpServerBuilder` replaces the
 SDK's `resources/list` handler, so those callbacks never run.
 
 **Fix:** Delete them. `new ResourceTemplate(uri)` without options is enough.

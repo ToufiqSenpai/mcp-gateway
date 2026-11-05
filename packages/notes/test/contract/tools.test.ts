@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { createServer } from "../../src/server"
+import { NotesServer } from "../../src/server"
 import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
 
 interface PropertySchema {
@@ -24,7 +24,7 @@ interface ToolListing {
 }
 
 async function listTools(): Promise<ToolListing[]> {
-  const reply = await call(createServer(stubContext), { method: "tools/list", params: {} })
+  const reply = await call(new NotesServer(stubContext).build(), { method: "tools/list", params: {} })
   return asReply<ToolListing[]>(reply.result?.["tools"])
 }
 
@@ -105,7 +105,7 @@ describe("notes tool contract", () => {
   })
 
   it("has no prompts and nothing subscribable", async () => {
-    const reply = await call(createServer(stubContext), { method: "server/discover", params: {} })
+    const reply = await call(new NotesServer(stubContext).build(), { method: "server/discover", params: {} })
     const capabilities = asReply<Record<string, JsonValue>>(reply.result?.["capabilities"])
     expect(capabilities["prompts"]).toBeUndefined()
     expect(capabilities["resources"]).toEqual({})

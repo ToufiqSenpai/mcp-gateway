@@ -1,7 +1,7 @@
 import type { McpContext } from "@mcp-gateway/common"
 import { describe, expect, it } from "vitest"
 
-import { createServer } from "../../src/server"
+import { CalendarServer } from "../../src/server"
 import { call, stubContext, asReply } from "../support/mcp"
 
 const noProviderContext: McpContext = {
@@ -43,7 +43,7 @@ interface PromptGetResult {
 }
 
 async function listPrompts(ctx: McpContext = stubContext): Promise<PromptListing[]> {
-  const reply = await call(createServer(ctx), { method: "prompts/list", params: {} })
+  const reply = await call(new CalendarServer(ctx).build(), { method: "prompts/list", params: {} })
   return asReply<PromptListing[]>(reply.result?.["prompts"])
 }
 
@@ -72,7 +72,7 @@ describe("calendar prompts", () => {
   })
 
   it("answers prompts/get without calling the Provider and resolves the Default Account", async () => {
-    const reply = await call(createServer(noProviderContext), {
+    const reply = await call(new CalendarServer(noProviderContext).build(), {
       method: "prompts/get",
       params: { name: "plan_day", arguments: {} }
     })
@@ -84,7 +84,7 @@ describe("calendar prompts", () => {
   })
 
   it("uses an explicit account without inventing one", async () => {
-    const reply = await call(createServer(noProviderContext), {
+    const reply = await call(new CalendarServer(noProviderContext).build(), {
       method: "prompts/get",
       params: { name: "triage_invites", arguments: { account: "work" } }
     })
@@ -94,7 +94,7 @@ describe("calendar prompts", () => {
   })
 
   it("answers -32602 when there is no Default Account and none was passed", async () => {
-    const reply = await call(createServer(noDefaultContext), {
+    const reply = await call(new CalendarServer(noDefaultContext).build(), {
       method: "prompts/get",
       params: { name: "plan_day", arguments: {} }
     })
@@ -103,7 +103,7 @@ describe("calendar prompts", () => {
   })
 
   it("answers -32602 when a required prompt argument is missing", async () => {
-    const reply = await call(createServer(noProviderContext), {
+    const reply = await call(new CalendarServer(noProviderContext).build(), {
       method: "prompts/get",
       params: { name: "find_meeting_time", arguments: {} }
     })

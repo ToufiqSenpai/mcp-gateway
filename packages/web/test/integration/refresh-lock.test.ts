@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { createMcpContext } from "../../src/accounts/lifecycle"
 import { TokenCipher } from "../../src/auth/crypto"
 import { AccountRepository } from "../../src/db/account-repository"
-import { createDb, nowSeconds } from "../../src/db/client"
+import { nowSeconds } from "../../src/db/client"
 import type { NewAccount } from "../../src/db/schema"
-import { REFRESH_TOKEN, counters, resetProviderCounters } from "../support/providers"
+import { REFRESH_TOKEN, counters, lastTokenRequest, resetProviderCounters } from "../support/providers"
 
 const cipher = new TokenCipher(env.TOKEN_ENCRYPTION_KEY)
 
@@ -20,7 +20,6 @@ interface SeedOptions {
 
 async function seed(options: SeedOptions = {}): Promise<string> {
   const id = crypto.randomUUID()
-  const db = createDb(env)
   const expiresIn = options.expiresInSeconds ?? 30
   const lock = options.lock ?? false
 
@@ -44,7 +43,7 @@ async function seed(options: SeedOptions = {}): Promise<string> {
     account.refreshLockUntil = nowSeconds() + 30
     account.refreshLockToken = "someone-else"
   }
-  await new AccountRepository(db).insert(account)
+  await new AccountRepository(env).insert(account)
   return id
 }
 
@@ -57,10 +56,9 @@ beforeEach(async () => {
 describe("single-flight refresh", () => {
   it("refreshes once for three simultaneous calls and rotates the refresh token", async () => {
     await seed({ expiresInSeconds: 30 })
-    const db = createDb(env)
-    const ctx = createMcpContext(env, db, "calendar")
+    const ctx = createMcpContext(env, "calendar")
 
-    const before = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const before = await new AccountRepository(env).findBySlug("calendar", "personal")
     const tokens = await Promise.all([
       ctx.getAccessToken("personal"),
       ctx.getAccessToken("personal"),
@@ -69,8 +67,10 @@ describe("single-flight refresh", () => {
 
     expect(tokens).toEqual(["ya29.access-one", "ya29.access-one", "ya29.access-one"])
     expect(counters.googleRefreshRequests).toBe(1)
+    expect(lastTokenRequest.body?.get("grant_type")).toBe("refresh_token")
+    expect(lastTokenRequest.body?.get("refresh_token")).toBe(REFRESH_TOKEN.googleOk)
 
-    const after = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const after = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(after?.accessTokenExpiresAt).toBeGreaterThan(before?.accessTokenExpiresAt ?? 0)
     expect(after?.refreshToken).not.toBe(before?.refreshToken)
     expect(after?.lastRefreshedAt).toBeGreaterThan(0)
@@ -79,13 +79,12 @@ describe("single-flight refresh", () => {
 
   it("keeps the old refresh token when the Provider omits a rotation", async () => {
     const id = await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.noScope })
-    const db = createDb(env)
-    const ctx = createMcpContext(env, db, "calendar")
-    const before = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const ctx = createMcpContext(env, "calendar")
+    const before = await new AccountRepository(env).findBySlug("calendar", "personal")
 
     await ctx.getAccessToken("personal")
 
-    const after = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const after = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(after?.refreshToken).not.toBe(before?.refreshToken)
     expect(after?.state).toBe("active")
     expect(await cipher.decrypt(after?.refreshToken ?? "", id, "refresh_token")).toBe(
@@ -95,20 +94,18 @@ describe("single-flight refresh", () => {
 
   it("takes over an expired lease left by a dead Worker", async () => {
     const id = await seed({ expiresInSeconds: 30 })
-    const db = createDb(env)
-    await new AccountRepository(db).update(id, { refreshLockUntil: nowSeconds() - 1, refreshLockToken: "dead" })
+    await new AccountRepository(env).update(id, { refreshLockUntil: nowSeconds() - 1, refreshLockToken: "dead" })
 
-    await createMcpContext(env, db, "calendar").getAccessToken("personal")
+    await createMcpContext(env, "calendar").getAccessToken("personal")
     expect(counters.googleRefreshRequests).toBe(1)
-    expect((await new AccountRepository(db).findBySlug("calendar", "personal"))?.refreshLockUntil).toBeNull()
+    expect((await new AccountRepository(env).findBySlug("calendar", "personal"))?.refreshLockUntil).toBeNull()
   })
 
   it("persists only while the writer still owns the lease", async () => {
     const id = await seed({ expiresInSeconds: 3600 })
-    const db = createDb(env)
-    await new AccountRepository(db).claimRefreshLock(id, "mine")
+    await new AccountRepository(env).claimRefreshLock(id, "mine")
 
-    const lost = await new AccountRepository(db).persistRefreshedTokens(id, "not-mine", {
+    const lost = await new AccountRepository(env).persistRefreshedTokens(id, "not-mine", {
       accessToken: "v1.x.y",
       refreshToken: "v1.x.y",
       accessTokenExpiresAt: nowSeconds() + 3600,
@@ -116,7 +113,7 @@ describe("single-flight refresh", () => {
     })
     expect(lost).toBe(false)
 
-    const won = await new AccountRepository(db).persistRefreshedTokens(id, "mine", {
+    const won = await new AccountRepository(env).persistRefreshedTokens(id, "mine", {
       accessToken: "v1.x.y",
       refreshToken: "v1.x.y",
       accessTokenExpiresAt: nowSeconds() + 3600,
@@ -127,7 +124,7 @@ describe("single-flight refresh", () => {
 
   it("uses a fresh cached token without calling the Provider", async () => {
     await seed({ expiresInSeconds: 3600 })
-    const ctx = createMcpContext(env, createDb(env), "calendar")
+    const ctx = createMcpContext(env, "calendar")
 
     await expect(ctx.getAccessToken("personal")).resolves.toBe("ya29.access-one")
     expect(counters.googleRefreshRequests).toBe(0)
@@ -137,11 +134,10 @@ describe("single-flight refresh", () => {
 describe("refresh failure mapping", () => {
   it("demotes on invalid_grant", async () => {
     await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.invalid })
-    const db = createDb(env)
 
-    await expect(createMcpContext(env, db, "calendar").getAccessToken("personal")).rejects.toThrow(/needs_reauth/)
+    await expect(createMcpContext(env, "calendar").getAccessToken("personal")).rejects.toThrow(/needs_reauth/)
 
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("needs_reauth")
     expect(row?.lastError).toBe("invalid_grant")
     expect(row?.refreshLockUntil).toBeNull()
@@ -149,24 +145,22 @@ describe("refresh failure mapping", () => {
 
   it("records a transient failure without touching state", async () => {
     await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.serverError })
-    const db = createDb(env)
 
     // The old token still has life left, so the call proceeds with it.
-    await expect(createMcpContext(env, db, "calendar").getAccessToken("personal")).resolves.toBe("ya29.access-one")
+    await expect(createMcpContext(env, "calendar").getAccessToken("personal")).resolves.toBe("ya29.access-one")
 
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("active")
-    expect(row?.lastError).toBe("refresh_failed")
+    expect(row?.lastError).toBe("temporarily_unavailable")
     expect(row?.refreshLockUntil).toBeNull()
   })
 
   it("proceeds with a still-valid token when the pre-emptive refresh fails", async () => {
     await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.serverError })
-    const db = createDb(env)
 
-    await expect(createMcpContext(env, db, "calendar").getAccessToken("personal")).resolves.toBe("ya29.access-one")
+    await expect(createMcpContext(env, "calendar").getAccessToken("personal")).resolves.toBe("ya29.access-one")
 
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("active")
   })
 })
@@ -174,11 +168,10 @@ describe("refresh failure mapping", () => {
 describe("scope enforcement at refresh", () => {
   it("demotes when the rotated Granted set stops covering the Required set", async () => {
     await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.narrowScope })
-    const db = createDb(env)
 
-    await expect(createMcpContext(env, db, "calendar").getAccessToken("personal")).rejects.toThrow(/missing_scope/)
+    await expect(createMcpContext(env, "calendar").getAccessToken("personal")).rejects.toThrow(/missing_scope/)
 
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("needs_reauth")
     expect(row?.lastError).toBe("missing_scope")
     expect(row?.refreshLockUntil).toBeNull()
@@ -186,11 +179,10 @@ describe("scope enforcement at refresh", () => {
 
   it("treats an absent scope field as unchanged, never empty", async () => {
     await seed({ expiresInSeconds: 30, refreshToken: REFRESH_TOKEN.noScope })
-    const db = createDb(env)
 
-    await createMcpContext(env, db, "calendar").getAccessToken("personal")
+    await createMcpContext(env, "calendar").getAccessToken("personal")
 
-    const row = await new AccountRepository(db).findBySlug("calendar", "personal")
+    const row = await new AccountRepository(env).findBySlug("calendar", "personal")
     expect(row?.state).toBe("active")
     expect(row?.scopes).toBe(REQUIRED_SCOPES.join(" "))
   })

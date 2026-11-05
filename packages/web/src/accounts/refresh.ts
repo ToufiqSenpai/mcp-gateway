@@ -1,7 +1,5 @@
-import { OAuth2RequestError, type Google, type MicrosoftEntraId, type OAuth2Tokens } from "arctic"
-
-import { callbackUri, providerClient } from "../auth/arctic"
 import { TokenCipher } from "../auth/crypto"
+import { OAuthProvider, OAuthTokenError, type OAuthTokens } from "../auth/oauth"
 import { covers, parseScopes, requiredScopes } from "../auth/scopes"
 import { AccountRepository } from "../db/account-repository"
 import { nowSeconds } from "../db/client"
@@ -21,12 +19,12 @@ function sleep(ms: number): Promise<void> {
 
 /** Permanent failures demote; everything else only records `last_error`. */
 function isPermanentRefreshFailure(error: Error | undefined): boolean {
-  if (!(error instanceof OAuth2RequestError)) return false
+  if (!(error instanceof OAuthTokenError)) return false
   return ["invalid_grant", "interaction_required", "invalid_client"].includes(error.code)
 }
 
 function providerErrorCode(error: Error | undefined): string {
-  if (error instanceof OAuth2RequestError) return error.code
+  if (error instanceof OAuthTokenError) return error.code
   if (error instanceof Error && error.name !== "Error") return error.name
   return "refresh_failed"
 }
@@ -79,26 +77,19 @@ export class RefreshService {
       throw new UnusableAccountError(account.mcp, account.slug, "no_credentials")
     }
 
-    let tokens: OAuth2Tokens
+    let tokens: OAuthTokens
     try {
       const refreshToken = await this.cipher.decrypt(fresh.refreshToken, fresh.id, "refresh_token")
-      const client = providerClient(
-        this.env,
-        fresh.provider,
-        callbackUri("https://placeholder.invalid/", fresh.provider)
-      )
-      tokens =
-        fresh.provider === "microsoft"
-          ? // SAFETY: the discriminant above pins the provider, so `providerClient` returned Entra.
-            await (client as MicrosoftEntraId).refreshAccessToken(refreshToken, [...requiredScopes(fresh.mcp)])
-          : // SAFETY: the discriminant above pins the provider, so `providerClient` returned Google.
-            await (client as Google).refreshAccessToken(refreshToken)
+      tokens = await OAuthProvider.for(this.env, fresh.provider).refreshTokens({
+        refreshToken,
+        scopes: requiredScopes(fresh.mcp)
+      })
     } catch (thrown) {
       // A throw that is not an Error carries no provider signal; treat it as an unnamed failure.
       const error = thrown instanceof Error ? thrown : undefined
       await this.repository.releaseRefreshLock(account.id, lockToken)
       if (isPermanentRefreshFailure(error)) {
-        const code = error instanceof OAuth2RequestError ? error.code : "invalid_grant"
+        const code = error instanceof OAuthTokenError ? error.code : "invalid_grant"
         await demoteAccount(this.repository, account, "needs_reauth", code)
       }
       await this.repository.update(account.id, { lastError: providerErrorCode(error) })
@@ -109,19 +100,19 @@ export class RefreshService {
 
     const required = requiredScopes(fresh.mcp)
     // An absent scope field means unchanged, never empty (Microsoft may omit it).
-    const granted = tokens.hasScopes() ? tokens.scopes() : parseScopes(fresh.scopes)
+    const granted = tokens.scopes ?? parseScopes(fresh.scopes)
     if (!covers(granted, required)) {
       await demoteAccount(this.repository, fresh, "missing_scope")
     }
 
-    const refreshToken = tokens.hasRefreshToken()
-      ? await this.cipher.encrypt(tokens.refreshToken(), fresh.id, "refresh_token")
+    const refreshToken = tokens.refreshToken
+      ? await this.cipher.encrypt(tokens.refreshToken, fresh.id, "refresh_token")
       : fresh.refreshToken
 
     const persisted = await this.repository.persistRefreshedTokens(fresh.id, lockToken, {
-      accessToken: await this.cipher.encrypt(tokens.accessToken(), fresh.id, "access_token"),
+      accessToken: await this.cipher.encrypt(tokens.accessToken, fresh.id, "access_token"),
       refreshToken,
-      accessTokenExpiresAt: Math.floor(tokens.accessTokenExpiresAt().getTime() / 1000),
+      accessTokenExpiresAt: tokens.expiresAt,
       lastRefreshedAt: nowSeconds(),
       scopes: granted.join(" ")
     })
@@ -132,7 +123,7 @@ export class RefreshService {
       if (winner) return this.currentAccessToken(winner)
     }
 
-    return tokens.accessToken()
+    return tokens.accessToken
   }
 
   private async currentAccessToken(account: Account): Promise<string> {
