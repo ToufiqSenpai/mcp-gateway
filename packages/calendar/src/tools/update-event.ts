@@ -16,6 +16,7 @@ import {
   visibilitySchema
 } from "../schemas"
 import type { GuestPermissions } from "../schemas"
+import { meetConferenceData } from "./meet"
 import type { ToolContext } from "./tool-context"
 
 function permissionPatch(permissions: GuestPermissions): calendar_v3.Schema$Event {
@@ -91,6 +92,67 @@ const inputSchema = z.object({
     .describe("Optional. Attach an existing Google Meet URL or meeting ID to the event. Overrides addGoogleMeetUrl.")
 })
 
+type UpdateInput = z.infer<typeof inputSchema>
+
+function simpleFieldPatch(args: UpdateInput): calendar_v3.Schema$Event {
+  const patch: calendar_v3.Schema$Event = {}
+  if (args.summary !== undefined) patch.summary = args.summary
+  if (args.description !== undefined) patch.description = args.description
+  if (args.location !== undefined) patch.location = args.location
+  if (args.colorId !== undefined) patch.colorId = args.colorId
+  if (args.visibility !== undefined) patch.visibility = args.visibility
+  if (args.availability === "AVAILABILITY_FREE") patch.transparency = "transparent"
+  if (args.availability === "AVAILABILITY_BUSY") patch.transparency = "opaque"
+  return patch
+}
+
+function timePatch(args: UpdateInput, current: calendar_v3.Schema$Event): calendar_v3.Schema$Event {
+  const patch: calendar_v3.Schema$Event = {}
+  const zone = args.timeZone ? { timeZone: args.timeZone } : {}
+  if (args.startTime) {
+    patch.start = args.allDay ? { date: args.startTime.slice(0, 10) } : { dateTime: args.startTime, ...zone }
+  }
+  if (args.endTime) {
+    patch.end = args.allDay ? { date: args.endTime.slice(0, 10) } : { dateTime: args.endTime, ...zone }
+    return patch
+  }
+  if (!args.startTime) return patch
+  // Preserve the existing duration when only the start moved.
+  const oldStart = asMillis(current.start)
+  const oldEnd = asMillis(current.end)
+  const newStart = asMillis(patch.start)
+  if (oldStart !== undefined && oldEnd !== undefined && newStart !== undefined) {
+    const newEnd = new Date(newStart + (oldEnd - oldStart)).toISOString()
+    patch.end = args.allDay ? { date: newEnd.slice(0, 10) } : { dateTime: newEnd, ...zone }
+  }
+  return patch
+}
+
+function mergeAttendees(current: calendar_v3.Schema$Event, args: UpdateInput): calendar_v3.Schema$EventAttendee[] {
+  const removed = new Set((args.removedAttendeeEmails ?? []).map(email => email.toLowerCase()))
+  const merged = (current.attendees ?? []).filter(
+    attendee => !attendee.email || !removed.has(attendee.email.toLowerCase())
+  )
+  const added = [...(args.addedAttendees ?? []), ...(args.addedAttendeeEmails ?? []).map(email => ({ email }))]
+  for (const attendee of added) {
+    if (!attendee.email) continue
+    if (merged.some(existing => existing.email?.toLowerCase() === attendee.email.toLowerCase())) continue
+    merged.push(toAttendeeEntry({ ...attendee, email: attendee.email }))
+  }
+  return merged
+}
+
+function mergeAttachments(current: calendar_v3.Schema$Event, args: UpdateInput): calendar_v3.Schema$EventAttachment[] {
+  const removed = new Set(args.removedAttachmentFileUrls ?? [])
+  const merged = (current.attachments ?? []).filter(
+    attachment => !attachment.fileUrl || !removed.has(attachment.fileUrl)
+  )
+  for (const attachment of args.addedAttachments ?? []) {
+    if (!merged.some(existing => existing.fileUrl === attachment.fileUrl)) merged.push(attachment)
+  }
+  return merged
+}
+
 export const updateEventTool = defineTool(
   "update_event",
   {
@@ -107,85 +169,25 @@ export const updateEventTool = defineTool(
 
     const current = (await client.events.get({ calendarId, eventId: args.eventId })).data
 
-    const patch: calendar_v3.Schema$Event = {}
-    if (args.summary !== undefined) patch.summary = args.summary
-    if (args.description !== undefined) patch.description = args.description
-    if (args.location !== undefined) patch.location = args.location
-    if (args.colorId !== undefined) patch.colorId = args.colorId
-    if (args.visibility !== undefined) patch.visibility = args.visibility
+    const patch: calendar_v3.Schema$Event = { ...simpleFieldPatch(args), ...timePatch(args, current) }
     if (args.guestPermissions !== undefined) {
       Object.assign(patch, permissionPatch(args.guestPermissions))
     }
     if (args.overrideReminders !== undefined) {
       patch.reminders = { useDefault: false, overrides: args.overrideReminders }
     }
-    if (args.availability === "AVAILABILITY_FREE") patch.transparency = "transparent"
-    if (args.availability === "AVAILABILITY_BUSY") patch.transparency = "opaque"
-
-    const zone = args.timeZone ? { timeZone: args.timeZone } : {}
-    if (args.startTime) {
-      patch.start = args.allDay ? { date: args.startTime.slice(0, 10) } : { dateTime: args.startTime, ...zone }
-    }
-    if (args.endTime) {
-      patch.end = args.allDay ? { date: args.endTime.slice(0, 10) } : { dateTime: args.endTime, ...zone }
-    } else if (args.startTime) {
-      // Preserve the existing duration when only the start moved.
-      const oldStart = asMillis(current.start)
-      const oldEnd = asMillis(current.end)
-      const newStart = asMillis(patch.start)
-      if (oldStart !== undefined && oldEnd !== undefined && newStart !== undefined) {
-        const newEnd = new Date(newStart + (oldEnd - oldStart)).toISOString()
-        patch.end = args.allDay ? { date: newEnd.slice(0, 10) } : { dateTime: newEnd, ...zone }
-      }
-    }
-
-    const hasAttendeeDelta =
+    if (
       args.addedAttendees !== undefined ||
       args.addedAttendeeEmails !== undefined ||
       args.removedAttendeeEmails !== undefined
-    if (hasAttendeeDelta) {
-      const removed = new Set((args.removedAttendeeEmails ?? []).map(email => email.toLowerCase()))
-      const merged = (current.attendees ?? []).filter(
-        attendee => !attendee.email || !removed.has(attendee.email.toLowerCase())
-      )
-      const added = [...(args.addedAttendees ?? []), ...(args.addedAttendeeEmails ?? []).map(email => ({ email }))]
-      for (const attendee of added) {
-        if (!attendee.email) continue
-        if (merged.some(existing => existing.email?.toLowerCase() === attendee.email.toLowerCase())) {
-          continue
-        }
-        merged.push(toAttendeeEntry({ ...attendee, email: attendee.email }))
-      }
-      patch.attendees = merged
+    ) {
+      patch.attendees = mergeAttendees(current, args)
     }
-
-    const hasAttachmentDelta = args.addedAttachments !== undefined || args.removedAttachmentFileUrls !== undefined
-    if (hasAttachmentDelta) {
-      const removed = new Set(args.removedAttachmentFileUrls ?? [])
-      const merged = (current.attachments ?? []).filter(
-        attachment => !attachment.fileUrl || !removed.has(attachment.fileUrl)
-      )
-      for (const attachment of args.addedAttachments ?? []) {
-        if (!merged.some(existing => existing.fileUrl === attachment.fileUrl)) {
-          merged.push(attachment)
-        }
-      }
-      patch.attachments = merged
+    if (args.addedAttachments !== undefined || args.removedAttachmentFileUrls !== undefined) {
+      patch.attachments = mergeAttachments(current, args)
     }
-
-    if (args.addGoogleMeetUrl || args.googleMeetUrl) {
-      const conferenceData: calendar_v3.Schema$ConferenceData = {}
-      if (args.addGoogleMeetUrl) {
-        conferenceData.createRequest = {
-          requestId: crypto.randomUUID(),
-          conferenceSolutionKey: { type: "hangoutsMeet" }
-        }
-      }
-      if (args.googleMeetUrl) {
-        conferenceData.entryPoints = [{ entryPointType: "video", uri: args.googleMeetUrl }]
-      }
-      patch.conferenceData = conferenceData
-    }
+    const conferenceData = meetConferenceData(args)
+    if (conferenceData) patch.conferenceData = conferenceData
 
     const params: calendar_v3.Params$Resource$Events$Patch = {
       calendarId,

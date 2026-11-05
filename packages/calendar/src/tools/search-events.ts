@@ -51,7 +51,7 @@ export const searchEventsTool = defineTool(
       accounts,
       pageToken: args.pageToken,
       pageSize: args.pageSize,
-      fetchAll: async () => ({ items: collected.items, truncated: collected.truncated })
+      fetchAll: () => Promise.resolve({ items: collected.items, truncated: collected.truncated })
     })
 
     const data: EventSearchData = { events: page.items }

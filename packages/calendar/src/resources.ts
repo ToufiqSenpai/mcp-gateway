@@ -11,7 +11,10 @@ const UNRESERVED_ESCAPE = /[!'()*]/g
 
 /** Percent-encodes everything outside RFC 3986 unreserved; calendar ids legally contain # and @. */
 export function encodeCalendarId(id: string): string {
-  return encodeURIComponent(id).replace(UNRESERVED_ESCAPE, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+  return encodeURIComponent(id).replace(
+    UNRESERVED_ESCAPE,
+    char => `%${char.codePointAt(0)!.toString(16).toUpperCase()}`
+  )
 }
 
 export function decodeCalendarId(segment: string): string {
@@ -45,7 +48,7 @@ export class CalendarResourceRegistry extends AccountResourceRegistry<ToolContex
   protected readonly resourceName = "calendar"
   protected readonly resourceTitle = "Calendar"
 
-  protected async enumerate(slug: string): Promise<{ items: ResourceItem[]; truncated: boolean }> {
+  protected enumerate(slug: string): Promise<{ items: ResourceItem[]; truncated: boolean }> {
     const client = this.context.calendar(slug)
     return collectPages(async pageToken => {
       const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }

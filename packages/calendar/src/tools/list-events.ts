@@ -138,7 +138,7 @@ export const listEventsTool = defineTool(
       accounts,
       pageToken: args.pageToken,
       pageSize: args.pageSize,
-      fetchAll: async () => ({ items: filtered, truncated: collected.truncated })
+      fetchAll: () => Promise.resolve({ items: filtered, truncated: collected.truncated })
     })
 
     const data: EventListData = {

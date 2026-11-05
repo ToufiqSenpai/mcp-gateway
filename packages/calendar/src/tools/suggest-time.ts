@@ -31,6 +31,8 @@ const preferencesSchema = z
   })
   .describe("Preferences to find suggested time.")
 
+type Preferences = z.infer<typeof preferencesSchema>
+
 function mergeBusy(intervals: Interval[]): Interval[] {
   const sorted = [...intervals].sort((left, right) => left.start - right.start)
   const merged: Interval[] = []
@@ -83,6 +85,47 @@ const inputSchema = z.object({
   preferences: preferencesSchema.optional()
 })
 
+function slotAllowed(
+  start: number,
+  end: number,
+  preferences: Preferences,
+  timeZone: string,
+  busy: Interval[]
+): boolean {
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+
+  if (preferences.excludeWeekends && (isWeekend(startDate, timeZone) || isWeekend(endDate, timeZone))) {
+    return false
+  }
+  if (preferences.startHour || preferences.endHour) {
+    const startMinute =
+      localHour(startDate, timeZone) * 60 + Number(localPart(startDate, timeZone, { minute: "2-digit" }))
+    const endMinute = localHour(endDate, timeZone) * 60 + Number(localPart(endDate, timeZone, { minute: "2-digit" }))
+    if (preferences.startHour && startMinute < minutesOfDay(preferences.startHour)) return false
+    if (preferences.endHour && endMinute > minutesOfDay(preferences.endHour)) return false
+  }
+  return !busy.some(interval => start < interval.end && end > interval.start)
+}
+
+function toTimeSlot(start: number, end: number, durationMinutes: number, timeZone?: string): TimeSlot {
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  const slotStart: SlotBoundary = { dateTime: startDate.toISOString() }
+  const slotEnd: SlotBoundary = { dateTime: endDate.toISOString() }
+  if (timeZone) {
+    slotStart.timeZone = timeZone
+    slotEnd.timeZone = timeZone
+  }
+  return {
+    start: slotStart,
+    end: slotEnd,
+    startTime: startDate.toISOString(),
+    endTime: endDate.toISOString(),
+    durationMinutes
+  }
+}
+
 export const suggestTimeTool = defineTool(
   "suggest_time",
   {
@@ -125,36 +168,8 @@ export const suggestTimeTool = defineTool(
     const step = durationMinutes * 60_000
     for (let start = windowStart; start + step <= windowEnd && slots.length < slotCount; start += step) {
       const end = start + step
-      const startDate = new Date(start)
-      const endDate = new Date(end)
-
-      if (preferences.excludeWeekends && (isWeekend(startDate, timeZone) || isWeekend(endDate, timeZone))) {
-        continue
-      }
-      if (preferences.startHour || preferences.endHour) {
-        const startMinute =
-          localHour(startDate, timeZone) * 60 + Number(localPart(startDate, timeZone, { minute: "2-digit" }))
-        const endMinute =
-          localHour(endDate, timeZone) * 60 + Number(localPart(endDate, timeZone, { minute: "2-digit" }))
-        if (preferences.startHour && startMinute < minutesOfDay(preferences.startHour)) continue
-        if (preferences.endHour && endMinute > minutesOfDay(preferences.endHour)) continue
-      }
-      if (busy.some(interval => start < interval.end && end > interval.start)) continue
-
-      const iso = (date: Date) => date.toISOString()
-      const slotStart: SlotBoundary = { dateTime: iso(startDate) }
-      const slotEnd: SlotBoundary = { dateTime: iso(endDate) }
-      if (args.timeZone) {
-        slotStart.timeZone = timeZone
-        slotEnd.timeZone = timeZone
-      }
-      slots.push({
-        start: slotStart,
-        end: slotEnd,
-        startTime: iso(startDate),
-        endTime: iso(endDate),
-        durationMinutes
-      })
+      if (!slotAllowed(start, end, preferences, timeZone, busy)) continue
+      slots.push(toTimeSlot(start, end, durationMinutes, args.timeZone))
     }
 
     return { timeSlots: slots }

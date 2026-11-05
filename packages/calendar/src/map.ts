@@ -113,7 +113,9 @@ function toWorkingLocationProperties(
   raw: calendar_v3.Schema$EventWorkingLocationProperties
 ): WorkingLocationProperties {
   const properties: WorkingLocationProperties = {}
-  const type = raw.type === "homeOffice" ? "HOME_OFFICE" : raw.type === "customLocation" ? "CUSTOM_LOCATION" : undefined
+  let type: WorkingLocationProperties["type"]
+  if (raw.type === "homeOffice") type = "HOME_OFFICE"
+  else if (raw.type === "customLocation") type = "CUSTOM_LOCATION"
   if (type) properties.type = type
   if (raw.customLocation?.label) properties.customLocationLabel = raw.customLocation.label
   return properties
@@ -144,8 +146,7 @@ function toReminder(raw: calendar_v3.Schema$EventReminder): CalendarReminder {
   return reminder
 }
 
-export function toEvent(raw: calendar_v3.Schema$Event): CalendarEvent {
-  const event: CalendarEvent = {}
+function applyEventBasics(event: CalendarEvent, raw: calendar_v3.Schema$Event): void {
   if (raw.id) event.id = raw.id
   if (raw.summary) event.summary = raw.summary
   if (raw.description) event.description = raw.description
@@ -157,9 +158,36 @@ export function toEvent(raw: calendar_v3.Schema$Event): CalendarEvent {
   if (raw.eventType) event.eventType = raw.eventType
   if (raw.recurrence) event.recurrence = raw.recurrence
   if (raw.recurringEventId) event.recurringEventId = raw.recurringEventId
+}
+
+function applyEventPeople(event: CalendarEvent, raw: calendar_v3.Schema$Event): void {
   if (raw.attendees) event.attendees = raw.attendees.map(toAttendee)
   if (raw.organizer) event.organizer = raw.organizer
   if (raw.creator) event.creator = raw.creator
+}
+
+function toGuestPermissions(raw: calendar_v3.Schema$Event): GuestPermissions | undefined {
+  if (
+    raw.guestsCanInviteOthers === undefined &&
+    raw.guestsCanModify === undefined &&
+    raw.guestsCanSeeOtherGuests === undefined
+  ) {
+    return undefined
+  }
+  const permissions: GuestPermissions = {}
+  if (raw.guestsCanInviteOthers !== undefined && raw.guestsCanInviteOthers !== null) {
+    permissions.guestsCanInviteOthers = raw.guestsCanInviteOthers
+  }
+  if (raw.guestsCanModify !== undefined && raw.guestsCanModify !== null) {
+    permissions.guestsCanModify = raw.guestsCanModify
+  }
+  if (raw.guestsCanSeeOtherGuests !== undefined && raw.guestsCanSeeOtherGuests !== null) {
+    permissions.guestsCanSeeGuests = raw.guestsCanSeeOtherGuests
+  }
+  return permissions
+}
+
+function applyEventExtras(event: CalendarEvent, raw: calendar_v3.Schema$Event): void {
   if (raw.attachments) event.attachments = raw.attachments.map(toAttachment)
   const conferenceUrl = videoEntryPoint(raw)
   if (conferenceUrl !== undefined) event.conferenceUrl = conferenceUrl
@@ -174,26 +202,18 @@ export function toEvent(raw: calendar_v3.Schema$Event): CalendarEvent {
   if (raw.workingLocationProperties) {
     event.workingLocationProperties = toWorkingLocationProperties(raw.workingLocationProperties)
   }
-  if (
-    raw.guestsCanInviteOthers !== undefined ||
-    raw.guestsCanModify !== undefined ||
-    raw.guestsCanSeeOtherGuests !== undefined
-  ) {
-    const permissions: GuestPermissions = {}
-    if (raw.guestsCanInviteOthers !== undefined && raw.guestsCanInviteOthers !== null) {
-      permissions.guestsCanInviteOthers = raw.guestsCanInviteOthers
-    }
-    if (raw.guestsCanModify !== undefined && raw.guestsCanModify !== null) {
-      permissions.guestsCanModify = raw.guestsCanModify
-    }
-    if (raw.guestsCanSeeOtherGuests !== undefined && raw.guestsCanSeeOtherGuests !== null) {
-      permissions.guestsCanSeeGuests = raw.guestsCanSeeOtherGuests
-    }
-    event.guestPermissions = permissions
-  }
+  const guestPermissions = toGuestPermissions(raw)
+  if (guestPermissions) event.guestPermissions = guestPermissions
   if (raw.htmlLink) event.htmlLink = raw.htmlLink
   if (raw.created) event.created = raw.created
   if (raw.updated) event.updated = raw.updated
+}
+
+export function toEvent(raw: calendar_v3.Schema$Event): CalendarEvent {
+  const event: CalendarEvent = {}
+  applyEventBasics(event, raw)
+  applyEventPeople(event, raw)
+  applyEventExtras(event, raw)
   return event
 }
 

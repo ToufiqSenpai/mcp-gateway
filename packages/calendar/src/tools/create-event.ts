@@ -19,6 +19,7 @@ import {
   workingLocationPropertiesSchema
 } from "../schemas"
 import type { GuestPermissions } from "../schemas"
+import { meetConferenceData } from "./meet"
 import type { ToolContext } from "./tool-context"
 
 function permissionsToBody(permissions: GuestPermissions | undefined): calendar_v3.Schema$Event {
@@ -87,6 +88,48 @@ const inputSchema = z.object({
     .describe("Optional. Working location properties (if eventType is WORKING_LOCATION).")
 })
 
+type CreateInput = z.infer<typeof inputSchema>
+
+function eventTimes(args: CreateInput) {
+  const start: calendar_v3.Schema$EventDateTime = args.allDay
+    ? { date: args.startTime.slice(0, 10) }
+    : { dateTime: args.startTime }
+  const end: calendar_v3.Schema$EventDateTime = args.allDay
+    ? { date: args.endTime.slice(0, 10) }
+    : { dateTime: args.endTime }
+  if (!args.allDay && args.timeZone) {
+    start.timeZone = args.timeZone
+    end.timeZone = args.timeZone
+  }
+  return { start, end }
+}
+
+function eventBody(
+  args: CreateInput,
+  times: { start: calendar_v3.Schema$EventDateTime; end: calendar_v3.Schema$EventDateTime },
+  attendees: calendar_v3.Schema$EventAttendee[] | undefined,
+  conferenceData: calendar_v3.Schema$ConferenceData | undefined
+): calendar_v3.Schema$Event {
+  const body: calendar_v3.Schema$Event = { summary: args.summary, ...times }
+  if (args.location) body.location = args.location
+  if (args.description) body.description = args.description
+  if (args.colorId) body.colorId = args.colorId
+  if (args.visibility) body.visibility = args.visibility
+  if (args.eventType) body.eventType = googleEventType(args.eventType)
+  if (attendees) body.attendees = attendees
+  if (args.attachments) body.attachments = args.attachments
+  if (args.recurrenceData) body.recurrence = args.recurrenceData
+  if (args.overrideReminders) body.reminders = { useDefault: false, overrides: args.overrideReminders }
+  if (args.workingLocationProperties) {
+    body.workingLocationProperties = toWorkingLocationPropertiesInput(args.workingLocationProperties)
+  }
+  if (args.availability === "AVAILABILITY_FREE") body.transparency = "transparent"
+  if (args.availability === "AVAILABILITY_BUSY") body.transparency = "opaque"
+  Object.assign(body, permissionsToBody(args.guestPermissions))
+  if (conferenceData) body.conferenceData = conferenceData
+  return body
+}
+
 export const createEventTool = defineTool(
   "create_event",
   {
@@ -100,50 +143,9 @@ export const createEventTool = defineTool(
     const slug = await context.resolve(args.account)
     const client = context.calendar(slug)
 
-    const start: calendar_v3.Schema$EventDateTime = args.allDay
-      ? { date: args.startTime.slice(0, 10) }
-      : { dateTime: args.startTime }
-    const end: calendar_v3.Schema$EventDateTime = args.allDay
-      ? { date: args.endTime.slice(0, 10) }
-      : { dateTime: args.endTime }
-    if (!args.allDay && args.timeZone) {
-      start.timeZone = args.timeZone
-      end.timeZone = args.timeZone
-    }
-
     const attendees = toAttendeeList(args.attendees) ?? args.attendeeEmails?.map(email => ({ email })) ?? undefined
-
-    let conferenceData: calendar_v3.Schema$Event["conferenceData"] | undefined
-    if (args.addGoogleMeetUrl || args.googleMeetUrl) {
-      conferenceData = {}
-      if (args.addGoogleMeetUrl) {
-        conferenceData.createRequest = {
-          requestId: crypto.randomUUID(),
-          conferenceSolutionKey: { type: "hangoutsMeet" }
-        }
-      }
-      if (args.googleMeetUrl) {
-        conferenceData.entryPoints = [{ entryPointType: "video", uri: args.googleMeetUrl }]
-      }
-    }
-
-    const requestBody: calendar_v3.Schema$Event = { summary: args.summary, start, end }
-    if (args.location) requestBody.location = args.location
-    if (args.description) requestBody.description = args.description
-    if (args.colorId) requestBody.colorId = args.colorId
-    if (args.visibility) requestBody.visibility = args.visibility
-    if (args.eventType) requestBody.eventType = googleEventType(args.eventType)
-    if (attendees) requestBody.attendees = attendees
-    if (args.attachments) requestBody.attachments = args.attachments
-    if (args.recurrenceData) requestBody.recurrence = args.recurrenceData
-    if (args.overrideReminders) requestBody.reminders = { useDefault: false, overrides: args.overrideReminders }
-    if (args.workingLocationProperties) {
-      requestBody.workingLocationProperties = toWorkingLocationPropertiesInput(args.workingLocationProperties)
-    }
-    if (args.availability === "AVAILABILITY_FREE") requestBody.transparency = "transparent"
-    if (args.availability === "AVAILABILITY_BUSY") requestBody.transparency = "opaque"
-    Object.assign(requestBody, permissionsToBody(args.guestPermissions))
-    if (conferenceData) requestBody.conferenceData = conferenceData
+    const conferenceData = meetConferenceData(args)
+    const requestBody = eventBody(args, eventTimes(args), attendees, conferenceData)
 
     const params: calendar_v3.Params$Resource$Events$Insert = {
       calendarId: args.calendarId ?? "primary",

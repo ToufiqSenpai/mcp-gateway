@@ -48,8 +48,8 @@ export const listCalendarsTool = defineTool(
       accounts: selected,
       pageToken: args.pageToken,
       pageSize: args.pageSize,
-      fetchAll: async () =>
-        collectAcrossAccounts(selected, async slug => {
+      fetchAll: () =>
+        collectAcrossAccounts(selected, slug => {
           const client = context.calendar(slug)
           return collectPages(async pageToken => {
             const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }

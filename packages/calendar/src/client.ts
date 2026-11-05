@@ -37,7 +37,7 @@ export class GoogleRequest {
     private readonly rootUrl: string
   ) {}
 
-  private async send(token: string, path: string, options: RequestOptions): Promise<Response> {
+  private send(token: string, path: string, options: RequestOptions): Promise<Response> {
     const url = new URL(path, this.rootUrl)
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value === undefined) continue

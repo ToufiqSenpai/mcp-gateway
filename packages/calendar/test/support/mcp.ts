@@ -37,24 +37,24 @@ export function asReply<T>(value: JsonValue | undefined): T {
 }
 
 export const stubContext: McpContext = {
-  async listAccounts() {
-    return [{ slug: "personal", isDefault: true }]
+  listAccounts() {
+    return Promise.resolve([{ slug: "personal", isDefault: true }])
   },
-  async getAccessToken() {
-    return "test-access-token"
+  getAccessToken() {
+    return Promise.resolve("test-access-token")
   },
-  async refreshAccessToken() {
-    return "test-access-token"
+  refreshAccessToken() {
+    return Promise.resolve("test-access-token")
   },
   cursors: {
-    async accountSet() {
-      return "test-set"
+    accountSet() {
+      return Promise.resolve("test-set")
     },
-    async encode() {
-      return "next-cursor"
+    encode() {
+      return Promise.resolve("next-cursor")
     },
-    async decode() {
-      return { o: 0, a: "test-set" }
+    decode() {
+      return Promise.resolve({ o: 0, a: "test-set" })
     }
   },
   async invalidateEnumeration() {},

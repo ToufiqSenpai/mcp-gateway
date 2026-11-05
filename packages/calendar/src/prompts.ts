@@ -48,13 +48,15 @@ export const calendarPrompts: readonly PromptDefinition[] = [
         .split(",")
         .map(email => email.trim())
         .filter(Boolean)
+      const from = windowStart ? ` from ${windowStart}` : ""
+      const to = windowEnd ? ` to ${windowEnd}` : ""
       return {
         messages: [
           {
             role: "user",
             content: {
               type: "text",
-              text: `Find a meeting time on the calendar Account "${slug}" for ${attendeesList.join(", ")}. Use suggest_time with ${durationMinutes ?? 30} minutes${windowStart ? ` from ${windowStart}` : ""}${windowEnd ? ` to ${windowEnd}` : ""}, then summarise the best slots and why.`
+              text: `Find a meeting time on the calendar Account "${slug}" for ${attendeesList.join(", ")}. Use suggest_time with ${durationMinutes ?? 30} minutes${from}${to}, then summarise the best slots and why.`
             }
           }
         ]
@@ -70,13 +72,14 @@ export const calendarPrompts: readonly PromptDefinition[] = [
     },
     async ({ weekOf, account }, context) => {
       const slug = await context.resolve(account)
+      const week = weekOf ? ` of ${weekOf}` : ""
       return {
         messages: [
           {
             role: "user",
             content: {
               type: "text",
-              text: `Summarise the week${weekOf ? ` of ${weekOf}` : ""} for the calendar Account "${slug}". Call list_events across that window, then report the shape of the week, recurring commitments, and anything overloaded. Do not change any event.`
+              text: `Summarise the week${week} for the calendar Account "${slug}". Call list_events across that window, then report the shape of the week, recurring commitments, and anything overloaded. Do not change any event.`
             }
           }
         ]
