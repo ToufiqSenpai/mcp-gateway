@@ -52,16 +52,16 @@ function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): bool
   if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
   if (!isTestFrameworkObject(sourceCode, callee.object)) return false;
   const property = callee.property;
-  const method = callee.computed
-    ? property.type === "Literal" &&
-      (property.value === "doMock" ||
-        property.value === "mock" ||
-        property.value === "unstable_mockModule")
-      ? property.value
-      : null
-    : property.type === "Identifier"
-      ? property.name
-      : null;
+  let method: string | null = null;
+  if (callee.computed) {
+    if (property.type === "Literal") {
+      if (property.value === "doMock" || property.value === "mock" || property.value === "unstable_mockModule") {
+        method = property.value;
+      }
+    }
+  } else if (property.type === "Identifier") {
+    method = property.name;
+  }
   return method !== null && moduleMockMethods.has(method);
 }
 

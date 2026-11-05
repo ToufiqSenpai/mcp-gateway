@@ -36,7 +36,14 @@ function parameterName(parameter: Parameter, sourceText: string): string {
   }
   return parameter.type === "Identifier"
     ? parameter.name
-    : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
+    : stripTrailingType(sourceText, "unknown");
+}
+
+/** Removes a trailing `: typeName` annotation without a regex (S8786). */
+function stripTrailingType(text: string, typeName: string): string {
+  const colon = text.lastIndexOf(":");
+  if (colon === -1 || text.slice(colon + 1).trim() !== typeName) return text;
+  return text.slice(0, colon).trimEnd();
 }
 
 /** Disallow unknown inputs except explicitly named error-cause enrichment. */

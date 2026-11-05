@@ -30,7 +30,14 @@ function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | nu
 function parameterName(parameter: Parameter, sourceCode: SourceCode): string {
 	return parameter.type === "Identifier"
 		? parameter.name
-		: sourceCode.getText(parameter).replace(/\s*:\s*object\s*$/u, "");
+		: stripTrailingType(sourceCode.getText(parameter), "object");
+}
+
+/** Removes a trailing `: typeName` annotation without a regex (S8786). */
+function stripTrailingType(text: string, typeName: string): string {
+	const colon = text.lastIndexOf(":");
+	if (colon === -1 || text.slice(colon + 1).trim() !== typeName) return text;
+	return text.slice(0, colon).trimEnd();
 }
 
 /** Ban the broad object type on function inputs, including local aliases to object. */
