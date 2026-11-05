@@ -54,40 +54,48 @@ type EnvironmentMaps = {
 	shadowedBuiltIns: Set<string>;
 };
 
+function shadowIfBuiltIn(name: string, environment: EnvironmentMaps): void {
+	if (BUILT_INS.has(name)) environment.shadowedBuiltIns.add(name);
+}
+
+function collectImport(declaration: ESTree.ImportDeclaration, environment: EnvironmentMaps): void {
+	for (const specifier of declaration.specifiers) shadowIfBuiltIn(specifier.local.name, environment);
+}
+
+function collectTypeAlias(
+	declaration: ESTree.TSTypeAliasDeclaration,
+	environment: EnvironmentMaps,
+): void {
+	const existing = environment.aliases.get(declaration.id.name);
+	if (existing === undefined) environment.aliases.set(declaration.id.name, declaration);
+	else environment.shadowedBuiltIns.add(declaration.id.name);
+	shadowIfBuiltIn(declaration.id.name, environment);
+}
+
+function collectInterface(
+	declaration: ESTree.TSInterfaceDeclaration,
+	environment: EnvironmentMaps,
+): void {
+	const declarations = environment.interfaces.get(declaration.id.name) ?? [];
+	declarations.push(declaration);
+	environment.interfaces.set(declaration.id.name, declarations);
+	shadowIfBuiltIn(declaration.id.name, environment);
+}
+
 function collectDeclaration(declaration: ESTree.Node | null, environment: EnvironmentMaps): void {
-	if (declaration?.type === "ImportDeclaration") {
-		for (const specifier of declaration.specifiers) {
-			if (BUILT_INS.has(specifier.local.name)) environment.shadowedBuiltIns.add(specifier.local.name);
-		}
-		return;
-	}
-
+	if (declaration?.type === "ImportDeclaration") return collectImport(declaration, environment);
 	if (declaration?.type === "TSTypeAliasDeclaration") {
-		const existing = environment.aliases.get(declaration.id.name);
-		if (existing === undefined) environment.aliases.set(declaration.id.name, declaration);
-		else environment.shadowedBuiltIns.add(declaration.id.name);
-		if (BUILT_INS.has(declaration.id.name)) environment.shadowedBuiltIns.add(declaration.id.name);
-		return;
+		return collectTypeAlias(declaration, environment);
 	}
-
 	if (declaration?.type === "TSInterfaceDeclaration") {
-		const declarations = environment.interfaces.get(declaration.id.name) ?? [];
-		declarations.push(declaration);
-		environment.interfaces.set(declaration.id.name, declarations);
-		if (BUILT_INS.has(declaration.id.name)) environment.shadowedBuiltIns.add(declaration.id.name);
-		return;
+		return collectInterface(declaration, environment);
 	}
-
-	if (declaration?.type === "TSEnumDeclaration") {
-		if (BUILT_INS.has(declaration.id.name)) environment.shadowedBuiltIns.add(declaration.id.name);
-		return;
-	}
-
+	if (declaration?.type === "TSEnumDeclaration") return shadowIfBuiltIn(declaration.id.name, environment);
 	if (
 		(declaration?.type === "ClassDeclaration" || declaration?.type === "FunctionDeclaration") &&
 		declaration.id !== null
 	) {
-		if (BUILT_INS.has(declaration.id.name)) environment.shadowedBuiltIns.add(declaration.id.name);
+		shadowIfBuiltIn(declaration.id.name, environment);
 	}
 }
 
