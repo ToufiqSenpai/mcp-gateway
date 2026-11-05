@@ -1,9 +1,9 @@
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { GraphError } from "../../client"
-import { toSection } from "../../map"
-import type { ToolContext } from "../tool-context"
+import { GraphError } from "../client"
+import { toSection } from "../map"
+import type { ToolContext } from "./tool-context"
 
 export const createSectionTool = defineTool(
   "create_section",

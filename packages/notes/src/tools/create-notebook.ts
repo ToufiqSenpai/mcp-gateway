@@ -1,9 +1,9 @@
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import { GraphError } from "../../client"
-import { toNotebook } from "../../map"
-import type { ToolContext } from "../tool-context"
+import { GraphError } from "../client"
+import { toNotebook } from "../map"
+import type { ToolContext } from "./tool-context"
 
 export const createNotebookTool = defineTool(
   "create_notebook",

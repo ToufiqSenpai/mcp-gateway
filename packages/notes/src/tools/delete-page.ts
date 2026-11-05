@@ -1,7 +1,7 @@
 import { defineTool } from "@mcp-gateway/common"
 import { z } from "zod"
 
-import type { ToolContext } from "../tool-context"
+import type { ToolContext } from "./tool-context"
 
 export const deletePageTool = defineTool(
   "delete_page",
