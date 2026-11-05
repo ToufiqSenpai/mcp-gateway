@@ -2,8 +2,11 @@
   "files": [],
   "references": [
     { "path": "packages/common" },
+    { "path": "packages/google" },
+    { "path": "packages/test" },
     { "path": "packages/calendar" },
     { "path": "packages/notes" },
+    { "path": "packages/sheets" },
     { "path": "packages/web" }
   ]
 }

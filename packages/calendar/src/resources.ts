@@ -53,7 +53,7 @@ export class CalendarResourceRegistry extends AccountResourceRegistry<ToolContex
     return collectPages(async pageToken => {
       const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }
       if (pageToken) params.pageToken = pageToken
-      const response = await client.calendarList.list(params)
+      const response = await client.listCalendars(params)
       return {
         items: (response.data.items ?? []).flatMap(calendar =>
           calendar.id
@@ -77,7 +77,7 @@ export class CalendarResourceRegistry extends AccountResourceRegistry<ToolContex
 
     let calendar
     try {
-      calendar = (await client.calendarList.get({ calendarId })).data
+      calendar = (await client.getCalendar({ calendarId })).data
     } catch (error) {
       if (error instanceof GoogleApiError && error.status === 404) {
         throw new ResourceNotFoundError(uri)
@@ -93,7 +93,7 @@ export class CalendarResourceRegistry extends AccountResourceRegistry<ToolContex
 
     const start = new Date()
     const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const events = await client.events.list({
+    const events = await client.listEvents({
       calendarId,
       timeMin: start.toISOString(),
       timeMax: end.toISOString(),

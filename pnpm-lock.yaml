@@ -220,9 +220,16 @@ importers:
       '@mcp-gateway/common':
         specifier: workspace:*
         version: link:../common
+      '@mcp-gateway/google':
+        specifier: workspace:*
+        version: link:../google
       gaxios:
         specifier: 7.3.1
         version: 7.3.1(supports-color@10.2.2)
+    devDependencies:
+      '@mcp-gateway/test':
+        specifier: workspace:*
+        version: link:../test
 
   packages/common:
     dependencies:
@@ -232,6 +239,12 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/google:
+    dependencies:
+      '@mcp-gateway/common':
+        specifier: workspace:*
+        version: link:../common
 
   packages/notes:
     dependencies:
@@ -247,6 +260,38 @@ importers:
       '@microsoft/msgraph-sdk-users':
         specifier: 1.0.0-preview.92
         version: 1.0.0-preview.92(supports-color@10.2.2)
+    devDependencies:
+      '@mcp-gateway/test':
+        specifier: workspace:*
+        version: link:../test
+
+  packages/sheets:
+    dependencies:
+      '@googleapis/sheets':
+        specifier: 18.1.2
+        version: 18.1.2(supports-color@10.2.2)
+      '@mcp-gateway/common':
+        specifier: workspace:*
+        version: link:../common
+      '@mcp-gateway/google':
+        specifier: workspace:*
+        version: link:../google
+    devDependencies:
+      '@mcp-gateway/test':
+        specifier: workspace:*
+        version: link:../test
+
+  packages/test:
+    dependencies:
+      '@mcp-gateway/common':
+        specifier: workspace:*
+        version: link:../common
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@modelcontextprotocol/server':
+        specifier: 2.4.0
+        version: 2.4.0
 
   packages/web:
     dependencies:
@@ -259,6 +304,9 @@ importers:
       '@mcp-gateway/notes':
         specifier: workspace:*
         version: link:../notes
+      '@mcp-gateway/sheets':
+        specifier: workspace:*
+        version: link:../sheets
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -979,6 +1027,10 @@ packages:
 
   '@googleapis/calendar@20.1.0':
     resolution: {integrity: sha512-bPO9wts48OAEhJn5UfgPC4FuyW/D6ufUzdXx0JHfeJIqg+O5bHvX/TenaAdbJuGhluhn5FLlyl6HzuhE4rFJqw==}
+    engines: {node: '>=22.0.0'}
+
+  '@googleapis/sheets@18.1.2':
+    resolution: {integrity: sha512-Roabm5YjcNKT8GXfIoIC1ne3bdIwu7vuWQUP3zwno9mkPnKlJ20bhk/Kf0RNYxvbQcNgjW9bnJ7l1uVmcVRk2Q==}
     engines: {node: '>=22.0.0'}
 
   '@img/colour@1.1.0':
@@ -3326,6 +3378,12 @@ snapshots:
     optional: true
 
   '@googleapis/calendar@20.1.0(supports-color@10.2.2)':
+    dependencies:
+      googleapis-common: 9.3.1(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@googleapis/sheets@18.1.2(supports-color@10.2.2)':
     dependencies:
       googleapis-common: 9.3.1(supports-color@10.2.2)
     transitivePeerDependencies:

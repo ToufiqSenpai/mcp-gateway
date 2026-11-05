@@ -18,6 +18,13 @@ const ICONS = new Map<string, ProductIcon>([
       src: "https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/assets/brand-icons/product/svg/onenote_48x1.svg",
       label: "Microsoft OneNote"
     }
+  ],
+  [
+    "sheets",
+    {
+      src: "https://www.gstatic.com/images/branding/product/2x/sheets_2020q4_48dp.png",
+      label: "Google Sheets"
+    }
   ]
 ])
 

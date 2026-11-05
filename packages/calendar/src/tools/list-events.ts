@@ -123,7 +123,7 @@ export const listEventsTool = defineTool(
       if (args.orderBy) params.orderBy = args.orderBy
       if (args.timeZone) params.timeZone = args.timeZone
       if (pageToken) params.pageToken = pageToken
-      const response = await client.events.list(params)
+      const response = await client.listEvents(params)
       meta ??= response.data
       return {
         items: (response.data.items ?? []).map(toEvent),

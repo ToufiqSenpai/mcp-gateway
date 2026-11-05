@@ -27,7 +27,7 @@ export const getEventTool = defineTool(
   async (args, context: ToolContext) => {
     const slug = await context.resolve(args.account)
     const client = context.calendar(slug)
-    const response = await client.events.get({
+    const response = await client.getEvent({
       calendarId: args.calendarId ?? "primary",
       eventId: args.eventId
     })

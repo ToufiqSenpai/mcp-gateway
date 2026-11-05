@@ -40,7 +40,7 @@ export const searchEventsTool = defineTool(
         maxResults: 250
       }
       if (pageToken) params.pageToken = pageToken
-      const response = await client.events.list(params)
+      const response = await client.listEvents(params)
       return {
         items: (response.data.items ?? []).map(toEvent),
         nextPageToken: response.data.nextPageToken

@@ -1,14 +1,15 @@
+import type { JSONValue } from "@modelcontextprotocol/server"
 import { describe, expect, it } from "vitest"
 
 import { NotesServer } from "../../src/server"
-import { call, stubContext, asReply, type JsonValue } from "../support/mcp"
+import { listTools as readTools, stubContext, withClient } from "../support/mcp"
 
 interface PropertySchema {
   type?: string
   description?: string
   pattern?: string
   maximum?: number
-  default?: JsonValue
+  default?: JSONValue
   properties?: Record<string, PropertySchema>
   items?: PropertySchema
   required?: string[]
@@ -24,9 +25,8 @@ interface ToolListing {
   annotations?: Record<string, boolean>
 }
 
-async function listTools(): Promise<ToolListing[]> {
-  const reply = await call(new NotesServer(stubContext).build(), { method: "tools/list", params: {} })
-  return asReply<ToolListing[]>(reply.result?.["tools"])
+function listTools(): Promise<ToolListing[]> {
+  return readTools<ToolListing>(new NotesServer(stubContext).build())
 }
 
 function tool(tools: ToolListing[], name: string): ToolListing {
@@ -122,10 +122,9 @@ describe("notes tool contract", () => {
   })
 
   it("has no prompts and nothing subscribable", async () => {
-    const reply = await call(new NotesServer(stubContext).build(), { method: "server/discover", params: {} })
-    const capabilities = asReply<Record<string, JsonValue>>(reply.result?.["capabilities"])
-    expect(capabilities["prompts"]).toBeUndefined()
-    expect(capabilities["resources"]).toEqual({})
+    const { capabilities } = await withClient(new NotesServer(stubContext).build(), client => client.discover())
+    expect(capabilities.prompts).toBeUndefined()
+    expect(capabilities.resources).toEqual({})
     expect(JSON.stringify(capabilities)).not.toContain("listChanged")
   })
 })

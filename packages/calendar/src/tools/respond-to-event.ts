@@ -35,7 +35,7 @@ export const respondToEventTool = defineTool(
     const client = context.calendar(slug)
     const calendarId = args.calendarId ?? "primary"
 
-    const current = (await client.events.get({ calendarId, eventId: args.eventId })).data
+    const current = (await client.getEvent({ calendarId, eventId: args.eventId })).data
     const self = current.attendees?.find(attendee => attendee.self === true)
     if (!self?.email) {
       throw new Error(
@@ -53,7 +53,7 @@ export const respondToEventTool = defineTool(
       attendees: [attendee]
     }
 
-    const response = await client.events.patch({
+    const response = await client.patchEvent({
       calendarId,
       eventId: args.eventId,
       sendUpdates: sendUpdatesFor(args.notificationLevel),

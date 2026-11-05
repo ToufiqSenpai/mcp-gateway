@@ -1,0 +1,21 @@
+{
+  "name": "@mcp-gateway/sheets",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp-gateway/common": "workspace:*",
+    "@mcp-gateway/google": "workspace:*",
+    "@googleapis/sheets": "18.1.2"
+  },
+  "devDependencies": {
+    "@mcp-gateway/test": "workspace:*"
+  }
+}

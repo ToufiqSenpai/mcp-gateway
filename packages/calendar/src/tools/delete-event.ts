@@ -32,8 +32,8 @@ export const deleteEventTool = defineTool(
     const client = context.calendar(slug)
     const calendarId = args.calendarId ?? "primary"
 
-    const existing = (await client.events.get({ calendarId, eventId: args.eventId })).data
-    await client.events.delete({
+    const existing = (await client.getEvent({ calendarId, eventId: args.eventId })).data
+    await client.deleteEvent({
       calendarId,
       eventId: args.eventId,
       sendUpdates: sendUpdatesFor(args.notificationLevel)

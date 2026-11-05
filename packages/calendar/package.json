@@ -12,7 +12,11 @@
   },
   "dependencies": {
     "@mcp-gateway/common": "workspace:*",
+    "@mcp-gateway/google": "workspace:*",
     "@googleapis/calendar": "20.1.0",
     "gaxios": "7.3.1"
+  },
+  "devDependencies": {
+    "@mcp-gateway/test": "workspace:*"
   }
 }

@@ -54,7 +54,7 @@ export const listCalendarsTool = defineTool(
           return collectPages(async pageToken => {
             const params: calendar_v3.Params$Resource$Calendarlist$List = { maxResults: 250 }
             if (pageToken) params.pageToken = pageToken
-            const response = await client.calendarList.list(params)
+            const response = await client.listCalendars(params)
             return {
               items: (response.data.items ?? []).map(toCalendarRow),
               nextPageToken: response.data.nextPageToken

@@ -2,7 +2,7 @@ import type { McpContext } from "@mcp-gateway/common"
 import { describe, expect, it } from "vitest"
 
 import { CalendarServer } from "../../src/server"
-import { call, stubContext, asReply } from "../support/mcp"
+import { getPrompt, listPrompts as readPrompts, stubContext } from "../support/mcp"
 
 const noProviderContext: McpContext = {
   ...stubContext,
@@ -42,9 +42,8 @@ interface PromptGetResult {
   cacheScope?: string
 }
 
-async function listPrompts(ctx: McpContext = stubContext): Promise<PromptListing[]> {
-  const reply = await call(new CalendarServer(ctx).build(), { method: "prompts/list", params: {} })
-  return asReply<PromptListing[]>(reply.result?.["prompts"])
+function listPrompts(ctx: McpContext = stubContext): Promise<PromptListing[]> {
+  return readPrompts<PromptListing>(new CalendarServer(ctx).build())
 }
 
 describe("calendar prompts", () => {
@@ -72,41 +71,31 @@ describe("calendar prompts", () => {
   })
 
   it("answers prompts/get without calling the Provider and resolves the Default Account", async () => {
-    const reply = await call(new CalendarServer(noProviderContext).build(), {
-      method: "prompts/get",
-      params: { name: "plan_day", arguments: {} }
-    })
+    const result = await getPrompt<PromptGetResult>(new CalendarServer(noProviderContext).build(), "plan_day")
 
-    const result = asReply<PromptGetResult>(reply.result)
     expect(result.messages).toHaveLength(1)
     expect(result.messages[0]?.content.text).toContain("personal")
     expect(result.messages[0]?.content.text).toContain("list_events")
   })
 
   it("uses an explicit account without inventing one", async () => {
-    const reply = await call(new CalendarServer(noProviderContext).build(), {
-      method: "prompts/get",
-      params: { name: "triage_invites", arguments: { account: "work" } }
+    const result = await getPrompt<PromptGetResult>(new CalendarServer(noProviderContext).build(), "triage_invites", {
+      account: "work"
     })
-    const result = asReply<PromptGetResult>(reply.result)
     const text = result.messages[0]?.content.text
     expect(text).toContain("work")
   })
 
   it("answers -32602 when there is no Default Account and none was passed", async () => {
-    const reply = await call(new CalendarServer(noDefaultContext).build(), {
-      method: "prompts/get",
-      params: { name: "plan_day", arguments: {} }
+    await expect(getPrompt(new CalendarServer(noDefaultContext).build(), "plan_day")).rejects.toMatchObject({
+      code: -32602,
+      message: expect.stringContaining("Default Account")
     })
-    expect(reply.error?.code).toBe(-32602)
-    expect(reply.error?.message).toContain("Default Account")
   })
 
   it("answers -32602 when a required prompt argument is missing", async () => {
-    const reply = await call(new CalendarServer(noProviderContext).build(), {
-      method: "prompts/get",
-      params: { name: "find_meeting_time", arguments: {} }
+    await expect(getPrompt(new CalendarServer(noProviderContext).build(), "find_meeting_time")).rejects.toMatchObject({
+      code: -32602
     })
-    expect(reply.error?.code).toBe(-32602)
   })
 })

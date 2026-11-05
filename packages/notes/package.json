@@ -15,5 +15,8 @@
     "@microsoft/kiota-abstractions": "1.0.0-preview.112",
     "@microsoft/msgraph-sdk": "1.0.0-preview.92",
     "@microsoft/msgraph-sdk-users": "1.0.0-preview.92"
+  },
+  "devDependencies": {
+    "@mcp-gateway/test": "workspace:*"
   }
 }
